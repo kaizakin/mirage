@@ -27,6 +27,7 @@ setup:
   siteUrl: http://shop.127.0.0.1.nip.io
   # Created on a fresh install; on an already-installed site it must name an existing administrator
   adminUser: admin
+  adminPassword: "password"
   wpCliImage: wordpress:cli-2.12.0
   kubectlImage: alpine/kubectl:1.36.4
   credentialsSecret: woo-api-credentials
@@ -46,6 +47,8 @@ mysql:
   mysql:
     database: "app_db"
     user: "app_user"
+    password: "password"
+    rootPassword: "password"
   persistence:
     size: 10Gi
   resources:
