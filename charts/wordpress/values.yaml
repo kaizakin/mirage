@@ -25,6 +25,8 @@ persistence:
 setup:
   # Public URL WordPress builds links from; override per environment
   siteUrl: http://shop.127.0.0.1.nip.io
+  # Created on a fresh install; on an already-installed site it must name an existing administrator
+  adminUser: admin
   wpCliImage: wordpress:cli-2.12.0
   kubectlImage: alpine/kubectl:1.36.4
   credentialsSecret: woo-api-credentials
