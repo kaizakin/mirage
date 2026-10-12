@@ -1,5 +1,3 @@
-{{- $dbName := ternary .Values.mysql.mysql.database .Values.externalDatabase.database .Values.mysql.enabled -}}
-{{- $dbUser := ternary .Values.mysql.mysql.user .Values.externalDatabase.user .Values.mysql.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -55,17 +53,7 @@ spec:
               containerPort: 80
               protocol: TCP
           env:
-            - name: WORDPRESS_DB_HOST
-              value: "{{ include "wordpress.mysql.host" . }}:3306"
-            - name: WORDPRESS_DB_NAME
-              value: {{ $dbName | default "app_db" | quote }}
-            - name: WORDPRESS_DB_USER
-              value: {{ $dbUser | default "app_user" | quote }}
-            - name: WORDPRESS_DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "wordpress.mysql.secretName" . }}
-                  key: mysql-password
+            {{- include "wordpress.dbEnv" . | nindent 12 }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu | default "200m" | quote }}
@@ -100,7 +88,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/www/html
+            - name: mu-plugins
+              mountPath: /var/www/html/wp-content/mu-plugins
+              readOnly: true
       volumes:
+        - name: mu-plugins
+          configMap:
+            name: {{ include "wordpress.fullname" . }}-mu-plugins
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
