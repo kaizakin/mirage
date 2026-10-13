@@ -3,8 +3,8 @@ SHELL := bash
 
 RELEASE_NAME ?= mirage
 NAMESPACE ?= mirage
-CHART_PATH ?= charts/wordpress
-# Created by the setup hook, so Helm doesn't own it; must match setup.credentialsSecret
+CHART_PATH ?= charts/platform
+# Created by the setup hook, so Helm does not own it; must match store.setup.credentialsSecret
 CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT
@@ -48,4 +48,4 @@ status-wordpress:
 	kubectl get pods -n $(NAMESPACE)
 
 test-live:
-	scripts/test-live.sh
+	test/e2e/woo-live.sh
