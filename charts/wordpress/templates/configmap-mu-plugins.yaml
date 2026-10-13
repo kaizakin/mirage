@@ -6,7 +6,4 @@ metadata:
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
 data:
-  # WordPress only offers application passwords over HTTPS; the in-cluster API runs over HTTP
-  application-passwords.php: |
-    <?php
-    add_filter('wp_is_application_passwords_available', '__return_true');
+  {{- (.Files.Glob "files/mu-plugins/*").AsConfig | nindent 2 }}
