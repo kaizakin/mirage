@@ -53,12 +53,15 @@ type LineItem struct {
 }
 
 // ListOrders returns orders created at or after `after`, optionally filtered by status ("" means any).
+// A zero `after` returns orders from any date.
 func (c *Client) ListOrders(ctx context.Context, after time.Time, status OrderStatus) ([]Order, error) {
 	q := url.Values{}
-	// WordPress shifts a zoned timestamp (…Z, …+00:00) into store-local time before comparing it with the GMT
-	// column, so send naive UTC. Its `after` is exclusive and second-granular, hence the one-second step back.
-	q.Set("after", after.UTC().Add(-time.Second).Format(wooTimeLayout))
-	q.Set("dates_are_gmt", "true")
+	if !after.IsZero() {
+		// WordPress shifts a zoned timestamp (…Z, …+00:00) into store-local time before comparing it with the GMT
+		// column, so send naive UTC. Its `after` is exclusive and second-granular, hence the one-second step back.
+		q.Set("after", after.UTC().Add(-time.Second).Format(wooTimeLayout))
+		q.Set("dates_are_gmt", "true")
+	}
 	if status != "" {
 		q.Set("status", string(status))
 	}

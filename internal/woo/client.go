@@ -102,6 +102,12 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	return resp.Header, nil
 }
 
+// Ping reports whether WordPress answers, by fetching the REST index.
+func (c *Client) Ping(ctx context.Context) error {
+	_, err := c.do(ctx, http.MethodGet, "/wp-json/", nil, nil, nil)
+	return err
+}
+
 // listAll walks every page of a collection endpoint, following X-WP-TotalPages.
 func listAll[T any](ctx context.Context, c *Client, path string, query url.Values) ([]T, error) {
 	q := maps.Clone(query)
@@ -113,7 +119,7 @@ func listAll[T any](ctx context.Context, c *Client, path string, query url.Value
 	q.Set("orderby", "id")
 	q.Set("order", "asc")
 
-	var all []T
+	all := []T{}
 	for page := 1; ; page++ {
 		q.Set("page", strconv.Itoa(page))
 		var batch []T

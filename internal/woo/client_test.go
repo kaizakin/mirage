@@ -79,6 +79,26 @@ func TestListOrdersFollowsPagesAndSendsGMTFilter(t *testing.T) {
 	}
 }
 
+func TestListOrdersWithoutDateSendsNoDateFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Has("after") || q.Has("dates_are_gmt") || q.Has("status") {
+			t.Errorf("query = %v", q)
+		}
+		w.Header().Set("X-WP-TotalPages", "1")
+		fmt.Fprint(w, `[{"id":1}]`)
+	}))
+	defer srv.Close()
+
+	orders, err := New(srv.URL, "u", "p").ListOrders(context.Background(), time.Time{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("orders = %+v", orders)
+	}
+}
+
 func TestAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -99,7 +119,7 @@ func TestStartOfDaySkipsMissingMidnight(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Chile springs forward at 00:00 on 2026-09-06; the day starts at 01:00 -03.
-	got := startOfDay(2026, time.September, 6, santiago)
+	got := StartOfDay(2026, time.September, 6, santiago)
 	if want := time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC); !got.Equal(want) {
 		t.Fatalf("start of day = %v, want %v", got, want.In(santiago))
 	}

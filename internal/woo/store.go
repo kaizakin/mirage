@@ -38,12 +38,13 @@ func (c *Client) StartOfToday(ctx context.Context) (time.Time, error) {
 		return time.Time{}, err
 	}
 	y, m, d := time.Now().In(loc).Date()
-	return startOfDay(y, m, d, loc), nil
+	return StartOfDay(y, m, d, loc), nil
 }
 
-// startOfDay finds the first instant of a date. Where DST skips midnight (America/Santiago),
-// time.Date normalizes 00:00 back into the previous day, so step forward to the transition.
-func startOfDay(y int, m time.Month, d int, loc *time.Location) time.Time {
+// StartOfDay returns the first instant of the date in loc. Where DST skips midnight
+// (America/Santiago), that is the moment the clocks jump forward.
+func StartOfDay(y int, m time.Month, d int, loc *time.Location) time.Time {
+	// time.Date normalizes a skipped 00:00 back into the previous day.
 	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
 	for t.Day() != d {
 		t = t.Add(30 * time.Minute)
