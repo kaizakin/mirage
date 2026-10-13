@@ -25,7 +25,7 @@ if ! wp core is-installed; then
 fi
 # A site installed before this hook existed keeps its own administrators; don't invent one.
 if ! wp user get "$ADMIN_USER" --field=ID >/dev/null 2>&1; then
-  echo "WordPress has no user '$ADMIN_USER'; set setup.adminUser to an existing administrator" >&2
+  echo "WordPress has no user '$ADMIN_USER'; set store.setup.adminUser to an existing administrator" >&2
   exit 1
 fi
 # core install only sets the URL once; keep it in sync with values on every upgrade.

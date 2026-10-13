@@ -1,5 +1,5 @@
 {{- /* Setup works on the WordPress files, so it needs the volume shared with the Deployment */ -}}
-{{- if .Values.persistence.enabled }}
+{{- if .Values.wordpress.persistence.enabled }}
 {{- $fullname := include "wordpress.fullname" . }}
 apiVersion: batch/v1
 kind: Job

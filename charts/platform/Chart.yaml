@@ -1,0 +1,10 @@
+apiVersion: v2
+name: platform
+description: Umbrella chart for the MCP gateway platform
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: store
+    version: 0.1.0
+    repository: file://charts/store

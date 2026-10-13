@@ -1,0 +1,66 @@
+wordpress:
+  replicaCount: 1
+  image:
+    repository: wordpress
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: true
+    className: traefik
+    host: shop.127.0.0.1.nip.io
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+# post-install/post-upgrade Job that installs WordPress + WooCommerce and
+# publishes an application password to the woo-api-credentials Secret
+setup:
+  # Public URL WordPress builds links from; override per environment
+  siteUrl: http://shop.127.0.0.1.nip.io
+  # Created on a fresh install; on an already-installed site it must name an existing administrator
+  adminUser: admin
+  adminPassword: "password"
+  wpCliImage: wordpress:cli-2.12.0
+  kubectlImage: alpine/kubectl:1.36.4
+  credentialsSecret: woo-api-credentials
+
+mysql:
+  # false points WordPress at externalDatabase instead of running MySQL in the release
+  enabled: true
+  image:
+    repository: mysql
+    tag: "8.0"
+    pullPolicy: IfNotPresent
+  database: app_db
+  user: app_user
+  password: "password"
+  rootPassword: "password"
+  persistence:
+    storageClass: ""
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+externalDatabase:
+  host: ""
+  port: 3306
+  database: app_db
+  user: app_user
+  existingSecret: ""

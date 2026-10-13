@@ -6,4 +6,4 @@ metadata:
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
 data:
-  {{- (.Files.Glob "files/mu-plugins/*").AsConfig | nindent 2 }}
+  {{- (.Files.Glob "files/*.php").AsConfig | nindent 2 }}
