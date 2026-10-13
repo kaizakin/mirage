@@ -80,7 +80,7 @@ func TestListOrdersFollowsPagesAndSendsGMTFilter(t *testing.T) {
 }
 
 func TestAPIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, `{"code":"woocommerce_rest_shop_order_invalid_id","message":"Invalid ID.","data":{"status":404}}`)
 	}))
@@ -106,7 +106,7 @@ func TestStartOfDaySkipsMissingMidnight(t *testing.T) {
 }
 
 func TestListRejectsMissingPaginationHeader(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `[{"id":1}]`)
 	}))
 	defer srv.Close()

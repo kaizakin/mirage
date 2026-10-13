@@ -1,3 +1,4 @@
+// Command mirage serves an echo MCP tool over streamable HTTP at http://127.0.0.1:8080/mcp.
 package main
 
 import (
@@ -83,6 +84,6 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
-func (s *statusWriter) Unwrap() http.ResponseWriter { 
-	return s.ResponseWriter 
+func (s *statusWriter) Unwrap() http.ResponseWriter {
+	return s.ResponseWriter
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -28,6 +29,8 @@ type Client struct {
 	http     *http.Client
 }
 
+// New returns a Client for the store at baseURL, authenticating as username with a
+// WordPress application password. Requests time out after 15 seconds.
 func New(baseURL, username, password string) *Client {
 	return &Client{
 		baseURL:  strings.TrimRight(baseURL, "/"),
@@ -44,6 +47,7 @@ type APIError struct {
 	Message    string `json:"message"`
 }
 
+// Error implements the error interface.
 func (e *APIError) Error() string {
 	return fmt.Sprintf("woocommerce: %d %s: %s", e.StatusCode, e.Code, e.Message)
 }
@@ -100,9 +104,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 
 // listAll walks every page of a collection endpoint, following X-WP-TotalPages.
 func listAll[T any](ctx context.Context, c *Client, path string, query url.Values) ([]T, error) {
-	q := url.Values{}
-	for k, v := range query {
-		q[k] = v
+	q := maps.Clone(query)
+	if q == nil {
+		q = url.Values{}
 	}
 	q.Set("per_page", strconv.Itoa(maxPerPage))
 	// Default newest-first paging repeats rows when new ones arrive mid-walk; ascending IDs only append.
@@ -134,6 +138,7 @@ type Time struct{ time.Time }
 
 const wooTimeLayout = "2006-01-02T15:04:05"
 
+// UnmarshalJSON parses a zoneless WooCommerce timestamp as UTC. JSON null leaves t unchanged.
 func (t *Time) UnmarshalJSON(b []byte) error {
 	if string(b) == "null" {
 		return nil

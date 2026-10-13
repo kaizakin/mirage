@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestLiveStore(t *testing.T) {
 		baseURL = "http://localhost:8081"
 	}
 	c := New(baseURL, username, password)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 
 	name := "Live Test Mug " + strconv.FormatInt(time.Now().UnixNano(), 36)
@@ -43,7 +44,7 @@ func TestLiveStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProducts: %v", err)
 	}
-	if !containsID(products, product.ID, func(p Product) int { return p.ID }) {
+	if !slices.ContainsFunc(products, func(p Product) bool { return p.ID == product.ID }) {
 		t.Fatalf("product %d missing from ListProducts (%d products)", product.ID, len(products))
 	}
 
@@ -70,7 +71,7 @@ func TestLiveStore(t *testing.T) {
 		t.Fatalf("ListOrders: %v", err)
 	}
 	t.Logf("%d processing order(s) today", len(orders))
-	if !containsID(orders, placed.ID, func(o Order) int { return o.ID }) {
+	if !slices.ContainsFunc(orders, func(o Order) bool { return o.ID == placed.ID }) {
 		t.Fatalf("order %d missing from today's processing orders", placed.ID)
 	}
 
@@ -79,7 +80,7 @@ func TestLiveStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListOrders(tomorrow): %v", err)
 	}
-	if containsID(later, placed.ID, func(o Order) int { return o.ID }) {
+	if slices.ContainsFunc(later, func(o Order) bool { return o.ID == placed.ID }) {
 		t.Fatalf("order %d listed as created after tomorrow", placed.ID)
 	}
 
@@ -100,18 +101,10 @@ func TestLiveStore(t *testing.T) {
 	}
 }
 
-func containsID[T any](items []T, id int, idOf func(T) int) bool {
-	for _, it := range items {
-		if idOf(it) == id {
-			return true
-		}
-	}
-	return false
-}
-
 func forceDelete(t *testing.T, c *Client, path string) {
 	t.Helper()
 	q := url.Values{"force": {"true"}}
+	// Cleanup runs after t.Context is canceled.
 	if _, err := c.do(context.Background(), http.MethodDelete, apiPrefix+path, q, nil, nil); err != nil {
 		t.Errorf("cleanup %s: %v", path, err)
 	}

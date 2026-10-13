@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
+// OrderStatus is a WooCommerce order status slug.
 type OrderStatus string
 
+// Order statuses built into WooCommerce. Plugins can register others.
 const (
 	StatusPending    OrderStatus = "pending"
 	StatusProcessing OrderStatus = "processing"
@@ -20,6 +22,7 @@ const (
 	StatusFailed     OrderStatus = "failed"
 )
 
+// Order is a WooCommerce order. Total and LineItem.Total are decimal strings.
 type Order struct {
 	ID            int         `json:"id"`
 	Number        string      `json:"number"`
@@ -33,6 +36,7 @@ type Order struct {
 	LineItems     []LineItem  `json:"line_items"`
 }
 
+// Address is the contact part of an order's billing address.
 type Address struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -40,6 +44,7 @@ type Address struct {
 	Phone     string `json:"phone"`
 }
 
+// LineItem is one product line of an order. Total is a decimal string.
 type LineItem struct {
 	ProductID int    `json:"product_id"`
 	Name      string `json:"name"`
@@ -60,19 +65,29 @@ func (c *Client) ListOrders(ctx context.Context, after time.Time, status OrderSt
 	return listAll[Order](ctx, c, "/orders", q)
 }
 
+// GetOrder returns the order with the given ID.
 func (c *Client) GetOrder(ctx context.Context, id int) (*Order, error) {
 	var out Order
-	if _, err := c.do(ctx, http.MethodGet, apiPrefix+"/orders/"+strconv.Itoa(id), nil, nil, &out); err != nil {
+	if _, err := c.do(ctx, http.MethodGet, orderPath(id), nil, nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
+// UpdateOrderStatus sets the order's status and returns the updated order.
 func (c *Client) UpdateOrderStatus(ctx context.Context, id int, status OrderStatus) (*Order, error) {
 	var out Order
-	body := map[string]OrderStatus{"status": status}
-	if _, err := c.do(ctx, http.MethodPut, apiPrefix+"/orders/"+strconv.Itoa(id), nil, body, &out); err != nil {
+	body := orderStatusUpdate{Status: status}
+	if _, err := c.do(ctx, http.MethodPut, orderPath(id), nil, body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+type orderStatusUpdate struct {
+	Status OrderStatus `json:"status"`
+}
+
+func orderPath(id int) string {
+	return apiPrefix + "/orders/" + strconv.Itoa(id)
 }
