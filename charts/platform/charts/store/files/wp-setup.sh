@@ -53,4 +53,5 @@ fi
 for uuid in $(wp user application-password list "$ADMIN_USER" --name=mcp --field=uuid); do
   wp user application-password delete "$ADMIN_USER" "$uuid"
 done
-wp user application-password create "$ADMIN_USER" mcp --porcelain >/shared/pass
+# printf drops the trailing newline, which would otherwise end up in the Secret and break Basic auth.
+printf %s "$(wp user application-password create "$ADMIN_USER" mcp --porcelain)" >/shared/pass
