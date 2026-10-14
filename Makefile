@@ -7,7 +7,9 @@ CHART_PATH ?= charts/platform
 # Created by the setup hook, so Helm does not own it; must match store.setup.credentialsSecret
 CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
-WOO_MCP_IMAGE ?= mirage/woo-mcp:dev
+# Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>.
+SERVICES := woo-mcp currency-mcp
+IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT
 
@@ -16,7 +18,7 @@ export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT
 help:
 	@echo "Usage:"
 	@echo "  make build           Compile every Go package"
-	@echo "  make images          Build $(WOO_MCP_IMAGE) and import it into k3d cluster $(K3D_CLUSTER)"
+	@echo "  make images          Build the $(SERVICES) images and import them into k3d cluster $(K3D_CLUSTER)"
 	@echo "  make helm-install    Build images and install the platform chart (release: $(RELEASE_NAME), ns: $(NAMESPACE))"
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and API credentials"
@@ -27,20 +29,23 @@ build:
 	go build ./...
 
 images:
-	docker build -f build/woo-mcp.Dockerfile -t $(WOO_MCP_IMAGE) .
-	k3d image import $(WOO_MCP_IMAGE) -c $(K3D_CLUSTER)
+	for s in $(SERVICES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
+	k3d image import $(foreach s,$(SERVICES),mirage/$(s):$(IMAGE_TAG)) -c $(K3D_CLUSTER)
+
+# A changed image ID rolls the pod even though the tag stays the same.
+IMAGE_ID_FLAGS = $(foreach s,$(SERVICES),--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
 
 helm-install: images
 	helm install $(RELEASE_NAME) $(CHART_PATH) \
 		--namespace $(NAMESPACE) \
 		--create-namespace \
-		--set woo-mcp.imageId=$$(docker image inspect -f '{{.Id}}' $(WOO_MCP_IMAGE))
+		$(IMAGE_ID_FLAGS)
 
 helm-upgrade: images
 	helm upgrade --install $(RELEASE_NAME) $(CHART_PATH) \
 		--namespace $(NAMESPACE) \
 		--create-namespace \
-		--set woo-mcp.imageId=$$(docker image inspect -f '{{.Id}}' $(WOO_MCP_IMAGE))
+		$(IMAGE_ID_FLAGS)
 
 # helm uninstall keeps StatefulSet volumes and the hook-created Secret. A reinstall would then reuse a MySQL
 # data dir initialized with the old password, so every uninstall wipes them.

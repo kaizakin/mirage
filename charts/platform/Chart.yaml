@@ -11,3 +11,6 @@ dependencies:
   - name: woo-mcp
     version: 0.1.0
     repository: file://charts/woo-mcp
+  - name: currency-mcp
+    version: 0.1.0
+    repository: file://charts/currency-mcp

@@ -1,0 +1,18 @@
+image:
+  repository: mirage/currency-mcp
+  tag: dev
+  pullPolicy: IfNotPresent
+# Image ID of the locally built image (make images sets it); a new value rolls the pod
+# even though the tag stays the same.
+imageId: ""
+
+# X-Api-Key the gateway presents to /mcp; empty keeps the existing one or generates one.
+apiKey: ""
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi

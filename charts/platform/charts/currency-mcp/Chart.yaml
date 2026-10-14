@@ -1,0 +1,6 @@
+apiVersion: v2
+name: currency-mcp
+description: Fixed-rate currency conversion MCP server behind an X-Api-Key header, reachable only from the gateway
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
