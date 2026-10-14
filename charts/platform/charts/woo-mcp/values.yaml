@@ -1,0 +1,22 @@
+image:
+  repository: mirage/woo-mcp
+  tag: dev
+  pullPolicy: IfNotPresent
+# Image ID of the locally built image (make images sets it); a new value rolls the pod
+# even though the tag stays the same.
+imageId: ""
+
+# WooCommerce base URL; empty means the store subchart's in-cluster Service.
+storeUrl: ""
+# Holds the WordPress application password under keys username and password; created by the store setup Job.
+credentialsSecret: woo-api-credentials
+# Token the gateway presents to /mcp; empty keeps the existing one or generates one.
+bearerToken: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
