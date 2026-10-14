@@ -7,13 +7,14 @@ CHART_PATH ?= charts/platform
 # Created by the setup hook, so Helm does not own it; must match store.setup.credentialsSecret
 CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
+STORE_PORT ?= 15432
 # Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>.
 SERVICES := woo-mcp currency-mcp
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
-export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT
+export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT
 
-.PHONY: help build images helm-install helm-upgrade helm-uninstall clean-state status test-live
+.PHONY: help build images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store
 
 help:
 	@echo "Usage:"
@@ -23,6 +24,7 @@ help:
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and API credentials"
 	@echo "  make test-live       Run the WooCommerce client tests against the live store"
+	@echo "  make test-store      Run the migration tests against the cluster Postgres"
 	@echo "  make status          Check status of the release and pods"
 
 build:
@@ -67,3 +69,6 @@ status:
 
 test-live:
 	test/e2e/woo-live.sh
+
+test-store:
+	test/e2e/store-live.sh
