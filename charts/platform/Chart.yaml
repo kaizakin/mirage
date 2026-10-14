@@ -14,3 +14,6 @@ dependencies:
   - name: currency-mcp
     version: 0.1.0
     repository: file://charts/currency-mcp
+  - name: postgres
+    version: 0.1.0
+    repository: file://charts/postgres

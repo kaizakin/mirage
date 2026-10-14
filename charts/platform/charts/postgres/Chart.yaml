@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres
+description: PostgreSQL for the gateway's users, API keys, servers, and audit log, reachable only from the gateway
+type: application
+version: 0.1.0
+appVersion: "17"

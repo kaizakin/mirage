@@ -1,0 +1,21 @@
+image:
+  repository: postgres
+  tag: 17.10-alpine
+  pullPolicy: IfNotPresent
+
+database: mirage
+user: mirage
+# Empty keeps the existing password or generates one.
+password: ""
+
+persistence:
+  storageClass: ""
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
