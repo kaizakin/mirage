@@ -11,11 +11,12 @@ spec:
       {{- include "woo-mcp.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
+  # Only the gateway may call this server; the gateway chart labels its pods app: gateway.
   ingress:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: gateway
+              app: gateway
       ports:
         - port: http
           protocol: TCP
