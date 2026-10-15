@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 	"github.com/kaizakin/mirage/internal/platform"
 	"github.com/kaizakin/mirage/internal/secretbox"
@@ -114,6 +115,9 @@ func seedServers(ctx context.Context, st *store.Store, box *secretbox.Box, spec 
 		return fmt.Errorf("SEED_SERVERS: %w", err)
 	}
 	for _, s := range seeds {
+		if err := naming.ValidateSlug(s.Slug); err != nil {
+			return fmt.Errorf("SEED_SERVERS: %w", err)
+		}
 		if s.CredentialEnv != "" {
 			s.Credential = os.Getenv(s.CredentialEnv)
 			if s.Credential == "" {

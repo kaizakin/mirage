@@ -92,6 +92,7 @@ func TestLiveMigrations(t *testing.T) {
 	mustExec(t, db, `INSERT INTO servers (slug, url) VALUES ('deepwiki', 'https://mcp.deepwiki.com/mcp')`)
 	mustExec(t, db, `INSERT INTO servers (slug, url, auth_type, credential_enc) VALUES ('woo', 'http://woo:8080/mcp', 'bearer', '\x01')`)
 	mustExec(t, db, `INSERT INTO servers (slug, url, auth_type, auth_header, credential_enc) VALUES ('currency', 'http://cur:8080/mcp', 'header', 'X-Api-Key', '\x01')`)
+	mustReject(t, db, "slug with an underscore", `INSERT INTO servers (slug, url) VALUES ('my_srv', 'http://x/mcp')`)
 	mustReject(t, db, "duplicate slug", `INSERT INTO servers (slug, url) VALUES ('woo', 'http://x/mcp')`)
 	mustReject(t, db, "credential without auth", `INSERT INTO servers (slug, url, credential_enc) VALUES ('a', 'http://x/mcp', '\x01')`)
 	mustReject(t, db, "bearer without credential", `INSERT INTO servers (slug, url, auth_type) VALUES ('b', 'http://x/mcp', 'bearer')`)
