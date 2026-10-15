@@ -39,7 +39,7 @@ func run() error {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", auth.RequireAPIKey("X-Api-Key", env["CURRENCY_API_KEY"])(mcpHandler))
+	mux.Handle("/mcp", auth.RequireHeader("X-Api-Key", env["CURRENCY_API_KEY"])(mcpHandler))
 	platform.RegisterHealth(mux, func(context.Context) error { return nil })
 
 	slog.Info("starting currency-mcp", "version", version)

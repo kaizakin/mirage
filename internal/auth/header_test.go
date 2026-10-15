@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestRequireAPIKey(t *testing.T) {
-	protected := RequireAPIKey("X-Api-Key", "secret")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestRequireHeader(t *testing.T) {
+	protected := RequireHeader("X-Api-Key", "secret")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	cases := []struct {
@@ -34,11 +34,11 @@ func TestRequireAPIKey(t *testing.T) {
 	}
 }
 
-func TestRequireAPIKeyRefusesEmptyKey(t *testing.T) {
+func TestRequireHeaderRefusesEmptyValue(t *testing.T) {
 	defer func() {
 		if recover() == nil {
-			t.Fatal("RequireAPIKey accepted an empty key")
+			t.Fatal("RequireHeader accepted an empty key")
 		}
 	}()
-	RequireAPIKey("X-Api-Key", "")
+	RequireHeader("X-Api-Key", "")
 }
