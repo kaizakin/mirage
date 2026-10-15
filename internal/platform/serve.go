@@ -12,9 +12,9 @@ import (
 
 const shutdownTimeout = 10 * time.Second
 
-// Serve runs handler on addr until SIGINT or SIGTERM, then shuts down gracefully:
-// in-flight requests get up to ten seconds to finish.
-func Serve(addr string, handler http.Handler) error {
+// Serve runs handler on addr until ctx is done, then shuts down gracefully: in-flight
+// requests get up to ten seconds to finish.
+func Serve(ctx context.Context, addr string, handler http.Handler) error {
 	shuttingDown, beginShutdown := context.WithCancel(context.Background())
 	defer beginShutdown()
 
@@ -24,9 +24,6 @@ func Serve(addr string, handler http.Handler) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	srv.RegisterOnShutdown(beginShutdown)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
@@ -46,6 +43,12 @@ func Serve(addr string, handler http.Handler) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
+}
+
+// SignalContext returns a context canceled on SIGINT or SIGTERM, the signals Kubernetes
+// and a terminal send to stop a process.
+func SignalContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 }
 
 // endStreamsOn ends GET requests, the standalone SSE streams an MCP client holds open for

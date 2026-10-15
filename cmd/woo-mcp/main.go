@@ -45,5 +45,7 @@ func run() error {
 	platform.RegisterHealth(mux, client.Ping)
 
 	slog.Info("starting woo-mcp", "store", env["WOO_BASE_URL"], "version", version)
-	return platform.Serve(cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux)
+	ctx, stop := platform.SignalContext()
+	defer stop()
+	return platform.Serve(ctx, cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux)
 }
