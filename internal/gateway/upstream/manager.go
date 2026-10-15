@@ -1,12 +1,14 @@
 // Package upstream keeps one MCP client session per enabled upstream server. Each server
-// gets a goroutine that connects, caches its tools, health-checks it on an interval, and
-// reconnects with exponential backoff; callers read a consistent snapshot at any time.
+// gets a goroutine that connects, caches its tools, re-lists them on an interval as a
+// health check, and reconnects with exponential backoff; callers read a consistent
+// snapshot at any time.
 package upstream
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net"
@@ -197,13 +199,12 @@ func (m *Manager) run(ctx context.Context, u *upstream) {
 
 	backoff := m.opts.MinBackoff
 	for {
-		refresh := make(chan struct{}, 1)
-		session, tools, err := m.connect(ctx, u.cfg, hc, refresh)
+		session, tools, err := m.connect(ctx, u.cfg, hc)
 		if err == nil {
 			backoff = m.opts.MinBackoff
 			m.set(u, Connected, "", tools, session)
 			log.Info("upstream connected", "tools", len(tools))
-			err = m.watch(ctx, u, session, refresh)
+			err = m.watch(ctx, u, session)
 			_ = session.Close()
 		}
 		if ctx.Err() != nil {
@@ -224,18 +225,17 @@ func (m *Manager) run(ctx context.Context, u *upstream) {
 
 // connect opens a session and lists its tools. The SDK detaches the session's lifetime
 // from the context passed to Connect, so a timeout here bounds only the handshake.
-func (m *Manager) connect(ctx context.Context, cfg Config, hc *http.Client, refresh chan<- struct{}) (*mcp.ClientSession, []*mcp.Tool, error) {
+//
+// The standalone server-sent event stream stays off: some upstreams (DeepWiki, which is
+// stateless) hold that GET open without answering, stalling Connect for over 15s. The
+// gateway needs no server-initiated messages from upstreams; the interval check picks up
+// tool changes.
+func (m *Manager) connect(ctx context.Context, cfg Config, hc *http.Client) (*mcp.ClientSession, []*mcp.Tool, error) {
 	ctx, cancel := context.WithTimeout(ctx, m.opts.Timeout)
 	defer cancel()
-	client := mcp.NewClient(&mcp.Implementation{Name: "mirage-gateway"}, &mcp.ClientOptions{
-		ToolListChangedHandler: func(context.Context, *mcp.ToolListChangedRequest) {
-			select {
-			case refresh <- struct{}{}:
-			default: // a refresh is already pending
-			}
-		},
-	})
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: cfg.URL, HTTPClient: hc}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "mirage-gateway"}, nil)
+	transport := &mcp.StreamableClientTransport{Endpoint: cfg.URL, HTTPClient: hc, DisableStandaloneSSE: true}
+	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -248,8 +248,8 @@ func (m *Manager) connect(ctx context.Context, cfg Config, hc *http.Client, refr
 }
 
 // watch health-checks a connected session until a check fails or ctx is done, refreshing
-// the cached tools on every tick and whenever the upstream announces a change.
-func (m *Manager) watch(ctx context.Context, u *upstream, session *mcp.ClientSession, refresh <-chan struct{}) error {
+// the cached tools on every tick.
+func (m *Manager) watch(ctx context.Context, u *upstream, session *mcp.ClientSession) error {
 	ticker := time.NewTicker(m.opts.Interval)
 	defer ticker.Stop()
 	for {
@@ -257,7 +257,6 @@ func (m *Manager) watch(ctx context.Context, u *upstream, session *mcp.ClientSes
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-		case <-refresh:
 		}
 		checkCtx, cancel := context.WithTimeout(ctx, m.opts.Timeout)
 		tools, err := listTools(checkCtx, session)
@@ -319,6 +318,8 @@ func Reason(err error) string {
 		return "connection refused"
 	case errors.Is(err, syscall.ECONNRESET):
 		return "connection reset"
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return "connection closed"
 	case errors.As(err, &dnsErr):
 		return "host not found: " + dnsErr.Name
 	}

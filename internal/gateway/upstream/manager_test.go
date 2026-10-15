@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -159,12 +160,10 @@ func TestRecoversAfterUpstreamRestarts(t *testing.T) {
 	waitFor(t, "reconnected", func() bool { return state(m, "cur").Status == Connected })
 }
 
-func TestToolListChangedRefreshesBeforeNextCheck(t *testing.T) {
+func TestIntervalCheckPicksUpToolChanges(t *testing.T) {
 	box := newBox(t)
 	up := startUpstream(t, "s3cret")
-	slow := fastOptions
-	slow.Interval = time.Hour // only the notification can trigger a refresh
-	m := NewManager(box, slow)
+	m := NewManager(box, fastOptions)
 	t.Cleanup(m.Close)
 	m.Reconcile(t.Context(), []Config{headerConfig(t, box, "cur", up.addr, "s3cret")})
 	waitFor(t, "connected", func() bool { return state(m, "cur").Status == Connected })
@@ -214,6 +213,7 @@ func TestReason(t *testing.T) {
 		"timed out":          context.DeadlineExceeded,
 		"connection refused": refused,
 		"boom":               errors.New("boom"),
+		"connection closed":  fmt.Errorf(`sending "tools/list": %w`, io.EOF),
 		"Unauthorized":       fmt.Errorf(`calling "initialize": %w`, fmt.Errorf(`sending "initialize": %w`, errors.New("Unauthorized"))),
 	}
 	for want, err := range cases {
