@@ -13,27 +13,27 @@ import (
 	"time"
 )
 
-// TestLiveMigrations runs against a real Postgres, e.g. through
+// freshDB creates an empty throwaway database on the Postgres named by STORE_TEST_DSN,
+// for example through
 //
 //	kubectl -n mirage port-forward svc/mirage-postgres 15432:5432
 //
-// with STORE_TEST_DSN set to a URL whose user may create databases. It migrates a
-// throwaway database, never the one in the DSN.
-func TestLiveMigrations(t *testing.T) {
+// and drops it when the test ends. The DSN's user must be allowed to create databases.
+// It skips the test when STORE_TEST_DSN is unset.
+func freshDB(t *testing.T) *sql.DB {
+	t.Helper()
 	dsn := os.Getenv("STORE_TEST_DSN")
 	if dsn == "" {
-		t.Skip("STORE_TEST_DSN not set; skipping live migration test")
+		t.Skip("STORE_TEST_DSN not set; skipping live store test")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-	defer cancel()
-
+	ctx := t.Context()
 	admin, err := Open(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Registered before the drop below; cleanups run last-in-first-out, so this runs after it.
 	t.Cleanup(func() { _ = admin.Close() })
-	name := "migrate_test_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	name := "store_test_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+name); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,14 @@ func TestLiveMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func TestLiveMigrations(t *testing.T) {
+	db := freshDB(t)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
 
 	// Two replicas starting together: the advisory lock must let both succeed.
 	var wg sync.WaitGroup

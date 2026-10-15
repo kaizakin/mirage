@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the internal/store live migration test against the cluster's Postgres. The test
+# Runs the internal/store live tests against the cluster's Postgres. Each test
 # migrates a throwaway database it creates and drops, never the gateway's own.
 #
 # Env: NAMESPACE, RELEASE_NAME, STORE_PORT.
@@ -16,4 +16,4 @@ for _ in {1..30}; do
   sleep 1
 done
 
-go test ./internal/store/ -run TestLiveMigrations -count=1 -v
+go test ./internal/store/ -run TestLive -count=1 -v
