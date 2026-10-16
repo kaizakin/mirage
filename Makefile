@@ -9,7 +9,7 @@ CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
 STORE_PORT ?= 15432
 # Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>.
-SERVICES := woo-mcp currency-mcp
+SERVICES := woo-mcp currency-mcp gateway
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT
@@ -32,7 +32,8 @@ build:
 
 images:
 	for s in $(SERVICES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
-	k3d image import $(foreach s,$(SERVICES),mirage/$(s):$(IMAGE_TAG)) -c $(K3D_CLUSTER)
+# One image per import: k3d reported success importing several at once yet dropped one.
+	for s in $(SERVICES); do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
 
 # A changed image ID rolls the pod even though the tag stays the same.
 IMAGE_ID_FLAGS = $(foreach s,$(SERVICES),--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
