@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/kaizakin/mirage/internal/auth"
+	"github.com/kaizakin/mirage/internal/gateway/audit"
 )
 
 // Store is the gateway's repository over its Postgres tables.
@@ -54,4 +55,13 @@ func (s *Store) APIKeyByID(ctx context.Context, id string) (auth.KeyRecord, erro
 		return auth.KeyRecord{}, auth.ErrKeyNotFound
 	}
 	return rec, err
+}
+
+// RecordCall implements audit.Recorder.
+func (s *Store) RecordCall(ctx context.Context, e audit.Entry) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_log (user_id, server_slug, tool, started_at, duration_ms, outcome, error)
+		VALUES (nullif($1, 0), $2, $3, $4, $5, $6, nullif($7, ''))`,
+		e.UserID, e.ServerSlug, e.Tool, e.StartedAt, e.Duration.Milliseconds(), string(e.Outcome), e.Error)
+	return err
 }

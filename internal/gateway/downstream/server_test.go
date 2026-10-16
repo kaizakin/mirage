@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/kaizakin/mirage/internal/gateway/audit"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 )
 
@@ -31,6 +32,9 @@ func newUpstream(t *testing.T, name string, tools ...string) *mcp.ClientSession 
 				case <-time.After(time.Duration(in.Wait) * time.Millisecond):
 				case <-ctx.Done():
 					return nil, nil, ctx.Err()
+				}
+				if in.Text == "fail" {
+					return nil, nil, fmt.Errorf("%s refused", tool)
 				}
 				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: name + "/" + tool + ":" + in.Text}}}, nil, nil
 			})
@@ -92,7 +96,26 @@ func (f *fakeUpstreams) Session(slug string) (*mcp.ClientSession, error) {
 	return nil, fmt.Errorf("upstream %s is unreachable: %s", slug, f.states[slug].Reason)
 }
 
+type recorder struct {
+	mu      sync.Mutex
+	entries []audit.Entry
+}
+
+func (r *recorder) RecordCall(_ context.Context, e audit.Entry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries = append(r.entries, e)
+	return nil
+}
+
+func (r *recorder) all() []audit.Entry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.entries)
+}
+
 type harness struct {
+	audit   *recorder
 	ups     *fakeUpstreams
 	gw      *Server
 	client  *mcp.ClientSession
@@ -102,11 +125,13 @@ type harness struct {
 func setup(t *testing.T, opts Options) *harness {
 	t.Helper()
 	h := &harness{
+		audit:   &recorder{},
 		ups:     &fakeUpstreams{states: map[string]upstream.State{}, sessions: map[string]*mcp.ClientSession{}},
 		changed: make(chan struct{}, 10),
 	}
 	h.ups.connect(t, "woo", newUpstream(t, "woo", "list_orders", "get_order"))
 	h.ups.connect(t, "currency", newUpstream(t, "currency", "convert", "slow_echo"))
+	opts.Audit = h.audit
 	h.gw = New(h.ups, opts)
 	h.gw.Sync()
 
@@ -242,5 +267,36 @@ func TestUnusableUpstreamToolIsSkipped(t *testing.T) {
 	h.gw.Sync() // must not panic
 	if got := h.toolNames(t); slices.Contains(got, "woo__broken") || !slices.Contains(got, "woo__list_orders") {
 		t.Fatalf("tools = %v, want the broken tool skipped and the rest kept", got)
+	}
+}
+
+func TestEveryCallIsAuditedWithItsOutcome(t *testing.T) {
+	h := setup(t, Options{CallTimeout: 300 * time.Millisecond})
+	h.call(t, "woo__list_orders", echoArgs{Text: "today"})
+	h.call(t, "woo__get_order", echoArgs{Text: "fail"})
+	h.call(t, "currency__slow_echo", echoArgs{Wait: 10_000})
+	h.ups.drop("currency", "connection refused")
+	h.call(t, "currency__convert", echoArgs{})
+
+	type row struct {
+		slug, tool string
+		outcome    audit.Outcome
+		err        string
+	}
+	var got []row
+	for _, e := range h.audit.all() {
+		if e.StartedAt.IsZero() || e.Duration < 0 {
+			t.Errorf("entry %+v lacks a start time or duration", e)
+		}
+		got = append(got, row{e.ServerSlug, e.Tool, e.Outcome, e.Error})
+	}
+	want := []row{
+		{"woo", "list_orders", audit.OK, ""},
+		{"woo", "get_order", audit.ToolError, "get_order refused"},
+		{"currency", "slow_echo", audit.Timeout, "upstream currency did not answer slow_echo within 300ms"},
+		{"currency", "convert", audit.Unreachable, "upstream currency is unreachable: connection refused"},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("audit rows:\n got %+v\nwant %+v", got, want)
 	}
 }

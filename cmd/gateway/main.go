@@ -71,7 +71,7 @@ func run() error {
 	var endpoint *downstream.Server
 	upstreams := upstream.NewManager(box, upstream.Options{OnChange: func() { endpoint.Sync() }})
 	defer upstreams.Close()
-	endpoint = downstream.New(upstreams, downstream.Options{Version: version})
+	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st})
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", endpoint.Handler())

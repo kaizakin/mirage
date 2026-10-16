@@ -15,6 +15,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/kaizakin/mirage/internal/auth"
+	"github.com/kaizakin/mirage/internal/gateway/audit"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 )
@@ -27,6 +29,8 @@ type Upstreams interface {
 
 // Options tune a Server. Zero fields take the defaults.
 type Options struct {
+	// Audit records every tool call. Required.
+	Audit audit.Recorder
 	// CallTimeout bounds each upstream tools/call. Default 20s.
 	CallTimeout time.Duration
 	Version     string
@@ -35,6 +39,7 @@ type Options struct {
 // Server is the gateway's downstream MCP endpoint.
 type Server struct {
 	upstreams   Upstreams
+	audit       audit.Recorder
 	callTimeout time.Duration
 	server      *mcp.Server
 
@@ -46,6 +51,7 @@ type Server struct {
 func New(upstreams Upstreams, opts Options) *Server {
 	s := &Server{
 		upstreams:   upstreams,
+		audit:       opts.Audit,
 		callTimeout: opts.CallTimeout,
 		registered:  map[string]*mcp.Tool{},
 	}
@@ -130,31 +136,79 @@ func (s *Server) register(t *mcp.Tool) (err error) {
 	return nil
 }
 
-// callTool routes a call to the upstream named by the tool's slug prefix.
+// callTool routes a call to the upstream named by the tool's slug prefix and records it.
+// The record is written in a defer, so every way a call can end is audited.
 func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	slug, tool, ok := naming.Decode(req.Params.Name)
-	if !ok {
-		return errorResult(fmt.Sprintf("unknown tool %q", req.Params.Name)), nil
+	slug, tool, _ := naming.Decode(req.Params.Name)
+	entry := audit.Entry{ServerSlug: slug, Tool: tool, StartedAt: time.Now()}
+	// Extra is set only by HTTP transports; in-process callers have none.
+	if req.Extra != nil {
+		if u, ok := auth.UserFromTokenInfo(req.Extra.TokenInfo); ok {
+			entry.UserID = u.ID
+		}
+	}
+	defer func() {
+		entry.Duration = time.Since(entry.StartedAt)
+		s.record(ctx, entry)
+	}()
+
+	res, outcome, msg := s.route(ctx, slug, tool, req.Params.Arguments)
+	entry.Outcome, entry.Error = outcome, msg
+	if outcome == audit.Canceled {
+		// The client went away; there is nobody to answer.
+		return nil, ctx.Err()
+	}
+	return res, nil
+}
+
+// route makes the upstream call and classifies how it ended. Every failure becomes an
+// isError result a model can read, never a protocol error.
+func (s *Server) route(ctx context.Context, slug, tool string, args any) (*mcp.CallToolResult, audit.Outcome, string) {
+	if slug == "" {
+		msg := "unknown tool: gateway tool names have the form <server>__<tool>"
+		return errorResult(msg), audit.Unreachable, msg
 	}
 	session, err := s.upstreams.Session(slug)
 	if err != nil {
-		return errorResult(err.Error()), nil
+		return errorResult(err.Error()), audit.Unreachable, err.Error()
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, s.callTimeout)
 	defer cancel()
-	res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: tool, Arguments: req.Params.Arguments})
+	res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: tool, Arguments: args})
 	switch {
+	case err == nil && res.IsError:
+		return res, audit.ToolError, firstText(res)
 	case err == nil:
-		return res, nil
+		return res, audit.OK, ""
 	case ctx.Err() != nil:
-		// The client went away; there is nobody to answer.
-		return nil, ctx.Err()
+		return nil, audit.Canceled, "client canceled the call"
 	case errors.Is(callCtx.Err(), context.DeadlineExceeded):
-		return errorResult(fmt.Sprintf("upstream %s did not answer %s within %s", slug, tool, s.callTimeout)), nil
+		msg := fmt.Sprintf("upstream %s did not answer %s within %s", slug, tool, s.callTimeout)
+		return errorResult(msg), audit.Timeout, msg
 	default:
-		return errorResult(fmt.Sprintf("upstream %s is unreachable: %s", slug, upstream.Reason(err))), nil
+		msg := fmt.Sprintf("upstream %s is unreachable: %s", slug, upstream.Reason(err))
+		return errorResult(msg), audit.Unreachable, msg
 	}
+}
+
+// record writes an audit entry. It outlives the request's context, so a call whose client
+// disconnected is still recorded; a failed write is logged, not surfaced to the caller.
+func (s *Server) record(ctx context.Context, e audit.Entry) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.audit.RecordCall(ctx, e); err != nil {
+		slog.Error("writing audit row", "server", e.ServerSlug, "tool", e.Tool, "outcome", e.Outcome, "err", err)
+	}
+}
+
+func firstText(res *mcp.CallToolResult) string {
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			return tc.Text
+		}
+	}
+	return ""
 }
 
 // errorResult is a tool error the model can read and act on, rather than a protocol error.
