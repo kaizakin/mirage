@@ -19,12 +19,15 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaizakin/mirage/internal/gateway/downstream"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 	"github.com/kaizakin/mirage/internal/platform"
 	"github.com/kaizakin/mirage/internal/secretbox"
 	"github.com/kaizakin/mirage/internal/store"
 )
+
+const version = "0.1.0"
 
 // serverPollInterval is how quickly the gateway notices servers enabled, disabled, or edited in the database.
 const serverPollInterval = 5 * time.Second
@@ -63,10 +66,15 @@ func run() error {
 		return err
 	}
 
-	upstreams := upstream.NewManager(box, upstream.Options{})
+	// The manager reports changes to the endpoint, which re-syncs its tools. Nothing connects
+	// before syncServers first reconciles, so endpoint is set by the time OnChange runs.
+	var endpoint *downstream.Server
+	upstreams := upstream.NewManager(box, upstream.Options{OnChange: func() { endpoint.Sync() }})
 	defer upstreams.Close()
+	endpoint = downstream.New(upstreams, downstream.Options{Version: version})
 
 	mux := http.NewServeMux()
+	mux.Handle("/mcp", endpoint.Handler())
 	platform.RegisterHealth(mux, db.PingContext)
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
