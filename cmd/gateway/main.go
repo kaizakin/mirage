@@ -17,6 +17,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,7 +65,7 @@ func run() error {
 	ctx, stop := platform.SignalContext()
 	defer stop()
 
-	db, err := store.Open(ctx, env["DATABASE_URL"])
+	db, err := waitForDatabase(ctx, env["DATABASE_URL"])
 	if err != nil {
 		return err
 	}
@@ -188,4 +189,24 @@ func seedAdmin(ctx context.Context, st *store.Store) error {
 		slog.Info("seeded admin", "email", email, "user_created", userCreated, "key_created", keyCreated, "key_id", keyID)
 	}
 	return nil
+}
+
+// waitForDatabase connects to Postgres, retrying with backoff until ctx is done. On a fresh
+// install Postgres is still initializing, and a new pod's address takes a moment to be
+// admitted by Postgres's NetworkPolicy; failing fast would only crash-loop the pod.
+func waitForDatabase(ctx context.Context, dsn string) (*sql.DB, error) {
+	wait := time.Second
+	for {
+		db, err := store.Open(ctx, dsn)
+		if err == nil {
+			return db, nil
+		}
+		slog.Warn("waiting for database", "err", err, "retry_in", wait)
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("database never became reachable: %w", err)
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, 10*time.Second)
+	}
 }
