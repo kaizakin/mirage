@@ -86,3 +86,25 @@ func TestLiveSeedServersIsIdempotentAndListsEnabled(t *testing.T) {
 		t.Fatalf("stored credential opens to %q, %v; want \"k\" bound to its slug", credential, err)
 	}
 }
+
+func TestLiveSeedAdminIsIdempotentAndItsKeyVerifies(t *testing.T) {
+	db := freshDB(t)
+	if err := Migrate(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	s := New(db)
+	key, _ := auth.GenerateKey()
+
+	userCreated, keyCreated, err := s.SeedAdmin(t.Context(), "Admin@Example.com", "hash", key.ID, key.SecretHash)
+	if err != nil || !userCreated || !keyCreated {
+		t.Fatalf("first seed: user=%v key=%v err=%v", userCreated, keyCreated, err)
+	}
+	userCreated, keyCreated, err = s.SeedAdmin(t.Context(), "admin@example.com", "other", key.ID, key.SecretHash)
+	if err != nil || userCreated || keyCreated {
+		t.Fatalf("re-seed: user=%v key=%v err=%v; want nothing created", userCreated, keyCreated, err)
+	}
+	u, err := auth.VerifyKey(t.Context(), s, key.Plaintext)
+	if err != nil || u.Role != "admin" || u.Email != "Admin@Example.com" {
+		t.Fatalf("seeded key verifies as %+v, %v", u, err)
+	}
+}

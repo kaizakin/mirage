@@ -65,3 +65,35 @@ func (s *Store) RecordCall(ctx context.Context, e audit.Entry) error {
 		e.UserID, e.ServerSlug, e.Tool, e.StartedAt, e.Duration.Milliseconds(), string(e.Outcome), e.Error)
 	return err
 }
+
+// SeedAdmin creates the first admin and, if keyID is set, their API key, skipping whichever
+// already exists, so it is safe on every startup. It reports what it created.
+func (s *Store) SeedAdmin(ctx context.Context, email, passwordHash, keyID string, keySecretHash []byte) (userCreated, keyCreated bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO users (email, password_hash, role) VALUES ($1, $2, 'admin')
+		ON CONFLICT ((lower(email))) DO NOTHING`, email, passwordHash)
+	if err != nil {
+		return false, false, err
+	}
+	n, _ := res.RowsAffected()
+	userCreated = n == 1
+
+	if keyID != "" {
+		res, err = tx.ExecContext(ctx, `
+			INSERT INTO api_keys (user_id, key_prefix, secret_hash)
+			SELECT id, $2, $3 FROM users WHERE lower(email) = lower($1)
+			ON CONFLICT (key_prefix) DO NOTHING`, email, keyID, keySecretHash)
+		if err != nil {
+			return false, false, err
+		}
+		n, _ = res.RowsAffected()
+		keyCreated = n == 1
+	}
+	return userCreated, keyCreated, tx.Commit()
+}
