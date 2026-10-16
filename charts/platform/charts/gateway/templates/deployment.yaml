@@ -1,0 +1,102 @@
+{{- $fullname := include "gateway.fullname" . -}}
+{{- $seeds := list -}}
+{{- range .Values.upstreams }}
+{{- $seed := dict "slug" .slug "url" (tpl .url $) "auth_type" .authType -}}
+{{- with .authHeader }}{{ $_ := set $seed "auth_header" . }}{{ end -}}
+{{- if .credentialSecret }}{{ $_ := set $seed "credential_env" (include "gateway.credentialEnv" .slug) }}{{ end -}}
+{{- $seeds = append $seeds $seed -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  # Sessions live in the pod's memory; more replicas need sticky routing first.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gateway.selectorLabels" . | nindent 8 }}
+        # The label the upstreams' and Postgres's NetworkPolicies admit.
+        app: gateway
+      annotations:
+        mirage/image-id: {{ .Values.imageId | quote }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: password
+            # Kubernetes expands $(PGPASSWORD) from the variable above.
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.database.user }}:$(PGPASSWORD)@{{ .Release.Name }}-postgres:5432/{{ .Values.database.name }}?sslmode=disable"
+            - name: SECRETBOX_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: secretbox-key
+            - name: SEED_ADMIN_EMAIL
+              value: {{ .Values.admin.email | quote }}
+            - name: SEED_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: admin-password
+            - name: SEED_ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: admin-api-key
+            - name: SEED_SERVERS
+              value: {{ $seeds | toJson | quote }}
+            {{- range $u := .Values.upstreams }}
+            {{- with $u.credentialSecret }}
+            - name: {{ include "gateway.credentialEnv" $u.slug }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ tpl .name $ }}
+                  key: {{ .key }}
+            {{- end }}
+            {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 2

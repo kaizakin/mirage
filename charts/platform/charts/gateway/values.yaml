@@ -1,0 +1,54 @@
+image:
+  repository: mirage/gateway
+  tag: dev
+  pullPolicy: IfNotPresent
+# Image ID of the locally built image (make images sets it); a new value rolls the pod
+# even though the tag stays the same.
+imageId: ""
+
+ingress:
+  className: traefik
+  host: gateway.127.0.0.1.nip.io
+
+# Base64 of 32 random bytes; seals upstream credentials. Empty keeps the existing one or
+# generates one. Losing it makes stored credentials unreadable.
+secretboxKey: ""
+
+# The first admin, created on first start. Empty password or apiKey keeps the existing one
+# or generates one; read them back from the <release>-gateway Secret.
+admin:
+  email: admin@mirage.local
+  password: ""
+  apiKey: ""
+
+database:
+  name: mirage
+  user: mirage
+
+# Upstreams created on first start; later edits in the database win. url and
+# credentialSecret.name are templated, so they can follow the release name.
+upstreams:
+  - slug: woo
+    url: "http://{{ .Release.Name }}-woo-mcp:8080/mcp"
+    authType: bearer
+    credentialSecret:
+      name: "{{ .Release.Name }}-woo-mcp"
+      key: token
+  - slug: currency
+    url: "http://{{ .Release.Name }}-currency-mcp:8080/mcp"
+    authType: header
+    authHeader: X-Api-Key
+    credentialSecret:
+      name: "{{ .Release.Name }}-currency-mcp"
+      key: apiKey
+  - slug: deepwiki
+    url: https://mcp.deepwiki.com/mcp
+    authType: none
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

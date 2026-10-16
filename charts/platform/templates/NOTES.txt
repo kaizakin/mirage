@@ -1,0 +1,7 @@
+MCP gateway: http://{{ .Values.gateway.ingress.host }}/mcp
+
+Admin API key (created on first install):
+  kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-gateway -o jsonpath='{.data.admin-api-key}' | base64 -d
+
+Connect Claude Code:
+  claude mcp add --transport http gw http://{{ .Values.gateway.ingress.host }}/mcp --header "Authorization: Bearer <admin API key>"
