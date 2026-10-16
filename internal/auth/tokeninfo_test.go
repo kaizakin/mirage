@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -52,5 +53,38 @@ func TestKeyVerifierReportsOutageAsServerError(t *testing.T) {
 	_, err := KeyVerifier(brokenStore{})(t.Context(), k.Plaintext, nil)
 	if err == nil || errors.Is(err, sdkauth.ErrInvalidToken) {
 		t.Fatalf("err = %v, want a non-ErrInvalidToken error so the middleware answers 500", err)
+	}
+}
+
+func TestRejectionsRevealNothingToTheCaller(t *testing.T) {
+	store := fakeKeys{}
+	revoked := issue(t, store, true)
+	unknown, _ := GenerateKey()
+	cases := map[string]struct {
+		store  KeyStore
+		key    string
+		status int
+	}{
+		"revoked":      {store, revoked, http.StatusUnauthorized},
+		"unknown id":   {store, unknown.Plaintext, http.StatusUnauthorized},
+		"store outage": {brokenStore{}, unknown.Plaintext, http.StatusInternalServerError},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			protected := sdkauth.RequireBearerToken(KeyVerifier(tc.store), nil)(http.NotFoundHandler())
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req.Header.Set("Authorization", "Bearer "+tc.key)
+			rec := httptest.NewRecorder()
+			protected.ServeHTTP(rec, req)
+			body := rec.Body.String()
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+			for _, secret := range []string{"revoked", "unknown", "secret", "connection refused", unknown.ID} {
+				if strings.Contains(body, secret) {
+					t.Fatalf("response body %q reveals %q", body, secret)
+				}
+			}
+		})
 	}
 }

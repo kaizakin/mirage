@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -19,11 +20,16 @@ const tokenInfoUser = "mirage.user"
 func KeyVerifier(store KeyStore) sdkauth.TokenVerifier {
 	return func(ctx context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
 		user, err := VerifyKey(ctx, store, token)
+		// The middleware writes the error into the response body, so callers get a generic
+		// message: the reason (unknown id, wrong secret, revoked) or a database error would
+		// tell an unauthenticated caller too much. Operators read it in the log.
 		if errors.Is(err, ErrInvalidKey) {
-			return nil, fmt.Errorf("%w: %w", sdkauth.ErrInvalidToken, err)
+			slog.InfoContext(ctx, "rejected API key", "reason", err)
+			return nil, fmt.Errorf("%w: invalid API key", sdkauth.ErrInvalidToken)
 		}
 		if err != nil {
-			return nil, err
+			slog.ErrorContext(ctx, "verifying API key", "err", err)
+			return nil, errors.New("authentication is unavailable")
 		}
 		return &sdkauth.TokenInfo{
 			UserID:     strconv.FormatInt(user.ID, 10),
