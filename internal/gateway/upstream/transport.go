@@ -24,12 +24,16 @@ func (t *credentialTransport) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 // httpClient returns the client for one upstream, decrypting its credential with the slug
-// as associated data. The client has no overall timeout: the session's server-sent event
-// stream stays open, so callers bound each call with a context instead.
+// as associated data. It has no overall timeout; callers bound each call with a context.
+//
+// It never follows redirects. Go strips Authorization on a cross-host redirect, but
+// credentialTransport would add the header back on the next hop and hand the credential,
+// and the replayed request body, to wherever the upstream points.
 func httpClient(cfg Config, box *secretbox.Box) (*http.Client, error) {
 	base := http.DefaultTransport.(*http.Transport).Clone()
+	noRedirects := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	if cfg.AuthType == AuthNone {
-		return &http.Client{Transport: base}, nil
+		return &http.Client{Transport: base, CheckRedirect: noRedirects}, nil
 	}
 	credential, err := box.Decrypt(cfg.CredentialEnc, []byte(cfg.Slug))
 	if err != nil {
@@ -39,5 +43,5 @@ func httpClient(cfg Config, box *secretbox.Box) (*http.Client, error) {
 	if cfg.AuthType == AuthBearer {
 		t.header, t.value = "Authorization", "Bearer "+string(credential)
 	}
-	return &http.Client{Transport: t}, nil
+	return &http.Client{Transport: t, CheckRedirect: noRedirects}, nil
 }

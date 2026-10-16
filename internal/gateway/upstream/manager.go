@@ -19,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -189,6 +190,9 @@ func (m *Manager) run(ctx context.Context, u *upstream) {
 	defer close(u.done)
 	log := slog.With("upstream", u.cfg.Slug)
 	hc, err := httpClient(u.cfg, m.box)
+	if hc != nil {
+		defer hc.CloseIdleConnections()
+	}
 	if err != nil {
 		// A credential that will not decrypt will not start decrypting on retry.
 		m.set(u, Unreachable, err.Error(), nil, nil)
@@ -268,11 +272,17 @@ func (m *Manager) watch(ctx context.Context, u *upstream, session *mcp.ClientSes
 	}
 }
 
+// maxTools bounds what one upstream can make the gateway hold and serve to every client.
+const maxTools = 1000
+
 func listTools(ctx context.Context, session *mcp.ClientSession) ([]*mcp.Tool, error) {
 	var tools []*mcp.Tool
 	for tool, err := range session.Tools(ctx, nil) {
 		if err != nil {
 			return nil, err
+		}
+		if len(tools) == maxTools {
+			return nil, fmt.Errorf("lists more than %d tools", maxTools)
 		}
 		tools = append(tools, tool)
 	}
@@ -327,5 +337,20 @@ func Reason(err error) string {
 	for next := errors.Unwrap(err); next != nil; next = errors.Unwrap(err) {
 		err = next
 	}
-	return err.Error()
+	return Truncate(err.Error())
+}
+
+// maxReasonLen bounds upstream-controlled text the gateway passes on to models and logs.
+const maxReasonLen = 512
+
+// Truncate shortens s to at most 512 bytes, without splitting a UTF-8 character.
+func Truncate(s string) string {
+	if len(s) <= maxReasonLen {
+		return s
+	}
+	cut := maxReasonLen
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }

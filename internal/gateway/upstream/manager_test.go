@@ -8,10 +8,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -220,5 +222,67 @@ func TestReason(t *testing.T) {
 		if got := Reason(err); got != want {
 			t.Errorf("Reason(%v) = %q, want %q", err, got, want)
 		}
+	}
+}
+
+func TestDoesNotFollowRedirectsWithTheCredential(t *testing.T) {
+	box := newBox(t)
+	var leaked atomic.Value
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	t.Cleanup(elsewhere.Close)
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+"/mcp", http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirector.Close)
+
+	sealed, err := box.Encrypt([]byte("SECRET"), []byte("woo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(box, fastOptions)
+	t.Cleanup(m.Close)
+	m.Reconcile(t.Context(), []Config{{Slug: "woo", URL: redirector.URL + "/mcp", AuthType: AuthBearer, CredentialEnc: sealed}})
+	waitFor(t, "unreachable", func() bool { return state(m, "woo").Status == Unreachable })
+
+	if got, _ := leaked.Load().(string); got != "" {
+		t.Fatalf("redirect target received Authorization %q", got)
+	}
+}
+
+func TestReconcileRestartsOnlyChangedUpstreams(t *testing.T) {
+	box := newBox(t)
+	up := startUpstream(t, "s3cret")
+	other := startUpstream(t, "s3cret")
+	m := NewManager(box, fastOptions)
+	t.Cleanup(m.Close)
+	cfg := headerConfig(t, box, "cur", up.addr, "s3cret")
+	m.Reconcile(t.Context(), []Config{cfg})
+	waitFor(t, "connected", func() bool { return state(m, "cur").Status == Connected })
+	before, _ := m.Session("cur")
+
+	m.Reconcile(t.Context(), []Config{cfg})
+	if after, _ := m.Session("cur"); after != before {
+		t.Fatal("reconciling an unchanged config restarted the upstream")
+	}
+
+	moved := headerConfig(t, box, "cur", other.addr, "s3cret")
+	m.Reconcile(t.Context(), []Config{moved})
+	waitFor(t, "reconnected to the new URL", func() bool {
+		s, _ := m.Session("cur")
+		return s != nil && s != before
+	})
+}
+
+func TestTruncateKeepsUTF8Intact(t *testing.T) {
+	long := strings.Repeat("é", 400) // 800 bytes
+	got := Truncate(long)
+	if !utf8.ValidString(got) || len(got) > maxReasonLen+len("…") {
+		t.Fatalf("Truncate gave %d bytes, valid UTF-8 %v", len(got), utf8.ValidString(got))
+	}
+	if Truncate("short") != "short" {
+		t.Fatal("Truncate changed a short string")
 	}
 }
