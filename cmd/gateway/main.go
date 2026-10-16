@@ -1,24 +1,35 @@
 // Command gateway fronts every upstream MCP server behind one authenticated endpoint.
 //
-// It reads DATABASE_URL and SECRETBOX_KEY (base64, 32 bytes), both required; LISTEN_ADDR,
-// which defaults to ":8080"; and SEED_SERVERS, an optional JSON list of upstreams to create
-// on first start, each naming the environment variable that holds its credential:
+// Every request to /mcp must carry an API key (Authorization: Bearer gw_...).
 //
-//	[{"slug": "woo", "url": "http://woo-mcp:8080/mcp", "auth_type": "bearer", "credential_env": "WOO_MCP_TOKEN"}]
+// It reads DATABASE_URL and SECRETBOX_KEY (base64, 32 bytes), both required; LISTEN_ADDR,
+// which defaults to ":8080"; and, to bootstrap an empty database:
+//
+//   - SEED_SERVERS, a JSON list of upstreams to create, each naming the environment variable
+//     that holds its credential:
+//     [{"slug": "woo", "url": "http://woo-mcp:8080/mcp", "auth_type": "bearer", "credential_env": "WOO_MCP_TOKEN"}]
+//   - SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD, the first admin, and optionally
+//     SEED_ADMIN_API_KEY, a gw_ key for them generated elsewhere.
+//
+// Seeding only creates what is missing, so operators' later changes survive restarts.
 package main
 
 import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
@@ -65,6 +76,9 @@ func run() error {
 	if err := seedServers(ctx, st, box, os.Getenv("SEED_SERVERS")); err != nil {
 		return err
 	}
+	if err := seedAdmin(ctx, st); err != nil {
+		return err
+	}
 
 	// The manager reports changes to the endpoint, which re-syncs its tools. Nothing connects
 	// before syncServers first reconciles, so endpoint is set by the time OnChange runs.
@@ -74,7 +88,9 @@ func run() error {
 	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st})
 
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", endpoint.Handler())
+	// The middleware verifies the key on every request, so a revoked key stops working
+	// inside an already open session.
+	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.KeyVerifier(st), nil)(endpoint.Handler()))
 	platform.RegisterHealth(mux, db.PingContext)
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
@@ -139,6 +155,37 @@ func seedServers(ctx context.Context, st *store.Store, box *secretbox.Box, spec 
 		if inserted {
 			slog.Info("seeded server", "slug", s.Slug, "url", s.URL)
 		}
+	}
+	return nil
+}
+
+// seedAdmin creates the first admin from SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD, plus an
+// API key from SEED_ADMIN_API_KEY when set, unless they already exist.
+func seedAdmin(ctx context.Context, st *store.Store) error {
+	email, password, key := os.Getenv("SEED_ADMIN_EMAIL"), os.Getenv("SEED_ADMIN_PASSWORD"), os.Getenv("SEED_ADMIN_API_KEY")
+	if email == "" {
+		return nil
+	}
+	if password == "" {
+		return errors.New("SEED_ADMIN_EMAIL is set but SEED_ADMIN_PASSWORD is not")
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	var keyID string
+	var keyHash []byte
+	if key != "" {
+		if keyID, keyHash, err = auth.HashKey(key); err != nil {
+			return fmt.Errorf("SEED_ADMIN_API_KEY: %w", err)
+		}
+	}
+	userCreated, keyCreated, err := st.SeedAdmin(ctx, email, string(passwordHash), keyID, keyHash)
+	if err != nil {
+		return fmt.Errorf("seeding admin: %w", err)
+	}
+	if userCreated || keyCreated {
+		slog.Info("seeded admin", "email", email, "user_created", userCreated, "key_created", keyCreated, "key_id", keyID)
 	}
 	return nil
 }
