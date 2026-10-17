@@ -14,7 +14,7 @@ IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT
 
-.PHONY: help build images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store
+.PHONY: help build images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e
 
 help:
 	@echo "Usage:"
@@ -25,6 +25,7 @@ help:
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and API credentials"
 	@echo "  make test-live       Run the WooCommerce client tests against the live store"
 	@echo "  make test-store      Run the migration tests against the cluster Postgres"
+	@echo "  make e2e             Run the gateway failure drills against the deployed platform"
 	@echo "  make status          Check status of the release and pods"
 
 build:
@@ -73,3 +74,6 @@ test-live:
 
 test-store:
 	test/e2e/store-live.sh
+
+e2e:
+	test/e2e/drills.sh
