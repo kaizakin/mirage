@@ -294,3 +294,13 @@ func (s *Store) Audit(ctx context.Context, f AuditFilter) ([]AuditRow, error) {
 	}
 	return out, rows.Err()
 }
+
+// UserByID implements auth.UserStore.
+func (s *Store) UserByID(ctx context.Context, id int64) (auth.User, error) {
+	u := auth.User{ID: id}
+	err := s.db.QueryRowContext(ctx, `SELECT email, role FROM users WHERE id = $1`, id).Scan(&u.Email, &u.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return auth.User{}, auth.ErrUserNotFound
+	}
+	return u, err
+}

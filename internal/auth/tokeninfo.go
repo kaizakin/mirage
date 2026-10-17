@@ -13,22 +13,44 @@ import (
 
 const tokenInfoUser = "mirage.user"
 
-// KeyVerifier adapts API key verification to the SDK's bearer middleware, which runs on
-// every request. A bad key becomes sdkauth.ErrInvalidToken (401); a store failure stays a
-// plain error (500), so an outage is not reported as a revoked key. Setting UserID lets the
-// SDK refuse a session presented by a different user than the one who opened it.
-func KeyVerifier(store KeyStore) sdkauth.TokenVerifier {
+// ErrUserNotFound is returned by a UserStore when no user has the given id.
+var ErrUserNotFound = errors.New("user not found")
+
+// UserStore loads users by id. It returns ErrUserNotFound when none matches.
+type UserStore interface {
+	UserByID(ctx context.Context, id int64) (User, error)
+}
+
+// Internal enables internal tokens in a Verifier: Issuer checks them and Users loads the
+// user each one names, so a token for a deleted user stops working at once.
+type Internal struct {
+	Issuer *TokenIssuer
+	Users  UserStore
+}
+
+// Verifier adapts credential checks to the SDK's bearer middleware, which runs on every
+// request. It accepts API keys and, when internal is not nil, internal tokens. A bad
+// credential becomes sdkauth.ErrInvalidToken (401); a store failure stays a plain error
+// (500), so an outage is not reported as a revoked key. Setting UserID lets the SDK refuse
+// a session presented by a different user than the one who opened it.
+func Verifier(keys KeyStore, internal *Internal) sdkauth.TokenVerifier {
 	return func(ctx context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
-		user, err := VerifyKey(ctx, store, token)
+		var user User
+		var err error
+		if IsInternalToken(token) {
+			user, err = internal.user(ctx, token)
+		} else {
+			user, err = VerifyKey(ctx, keys, token)
+		}
 		// The middleware writes the error into the response body, so callers get a generic
 		// message: the reason (unknown id, wrong secret, revoked) or a database error would
 		// tell an unauthenticated caller too much. Operators read it in the log.
-		if errors.Is(err, ErrInvalidKey) {
-			slog.InfoContext(ctx, "rejected API key", "reason", err)
+		if errors.Is(err, ErrInvalidKey) || errors.Is(err, ErrInvalidInternalToken) {
+			slog.InfoContext(ctx, "rejected credential", "reason", err)
 			return nil, fmt.Errorf("%w: invalid API key", sdkauth.ErrInvalidToken)
 		}
 		if err != nil {
-			slog.ErrorContext(ctx, "verifying API key", "err", err)
+			slog.ErrorContext(ctx, "verifying credential", "err", err)
 			return nil, errors.New("authentication is unavailable")
 		}
 		return &sdkauth.TokenInfo{
@@ -37,6 +59,21 @@ func KeyVerifier(store KeyStore) sdkauth.TokenVerifier {
 			Extra:      map[string]any{tokenInfoUser: user},
 		}, nil
 	}
+}
+
+func (in *Internal) user(ctx context.Context, token string) (User, error) {
+	if in == nil {
+		return User{}, fmt.Errorf("%w: internal tokens are not accepted here", ErrInvalidInternalToken)
+	}
+	id, err := in.Issuer.Verify(token)
+	if err != nil {
+		return User{}, err
+	}
+	u, err := in.Users.UserByID(ctx, id)
+	if errors.Is(err, ErrUserNotFound) {
+		return User{}, fmt.Errorf("%w: user %d no longer exists", ErrInvalidInternalToken, id)
+	}
+	return u, err
 }
 
 // UserFromTokenInfo returns the user a request authenticated as, from the token info the
