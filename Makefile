@@ -8,17 +8,19 @@ CHART_PATH ?= charts/platform
 CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
 STORE_PORT ?= 15432
-# Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>.
+# Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>;
+# the dashboard image builds from web/dashboard.
 SERVICES := woo-mcp currency-mcp gateway
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT
 
-.PHONY: help build images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e
+.PHONY: help build lint images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e
 
 help:
 	@echo "Usage:"
 	@echo "  make build           Compile every Go package"
+	@echo "  make lint            gofmt, go vet, staticcheck, and revive over the Go code"
 	@echo "  make images          Build the $(SERVICES) images and import them into k3d cluster $(K3D_CLUSTER)"
 	@echo "  make helm-install    Build images and install the platform chart (release: $(RELEASE_NAME), ns: $(NAMESPACE))"
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
@@ -31,13 +33,22 @@ help:
 build:
 	go build ./...
 
+# Pinned so lint results do not change under us; revive walks the tree itself, so it is told
+# to skip the dashboard's node_modules, which can contain stray .go files.
+lint:
+	test -z "$$(gofmt -l $$(go list -f '{{.Dir}}' ./...))" || { gofmt -l $$(go list -f '{{.Dir}}' ./...); exit 1; }
+	go vet ./...
+	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks all ./...
+	go run github.com/mgechev/revive@v1.17.1 -formatter plain -set_exit_status -exclude ./web/... ./...
+
 images:
 	for s in $(SERVICES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
+	docker build -t mirage/dashboard:$(IMAGE_TAG) web/dashboard
 # One image per import: k3d reported success importing several at once yet dropped one.
-	for s in $(SERVICES); do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
+	for s in $(SERVICES) dashboard; do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
 
 # A changed image ID rolls the pod even though the tag stays the same.
-IMAGE_ID_FLAGS = $(foreach s,$(SERVICES),--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
+IMAGE_ID_FLAGS = $(foreach s,$(SERVICES) dashboard,--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
 
 helm-install: images
 	helm install $(RELEASE_NAME) $(CHART_PATH) \

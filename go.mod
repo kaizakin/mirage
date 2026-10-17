@@ -2,6 +2,9 @@ module github.com/kaizakin/mirage
 
 go 1.26.0
 
+// The dashboard is a JavaScript project; npm packages there can ship stray .go files.
+ignore ./web
+
 require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/jackc/pgx/v5 v5.11.0
