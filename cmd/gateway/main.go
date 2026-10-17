@@ -12,7 +12,9 @@
 //     SEED_ADMIN_API_KEY, a gw_ key for them generated elsewhere.
 //
 // The dashboard API is served under /api. Its session cookie is Secure unless
-// INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set.
+// INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. With
+// GEMINI_API_KEY set, POST /api/chat runs a Gemini agent (GEMINI_MODEL) whose tool calls go
+// through this gateway's own /mcp as the logged-in user.
 //
 // Seeding only creates what is missing, so operators' later changes survive restarts.
 package main
@@ -25,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -33,6 +36,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaizakin/mirage/internal/agent"
+	"github.com/kaizakin/mirage/internal/agent/llm"
 	"github.com/kaizakin/mirage/internal/api"
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
@@ -92,9 +97,16 @@ func run() error {
 	defer upstreams.Close()
 	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st})
 
+	issuer, err := auth.NewTokenIssuer()
+	if err != nil {
+		return err
+	}
+	listen := cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080")
+
 	// A buffered slot: requests coalesce while a reload is pending.
 	reload := make(chan struct{}, 1)
 	dashboard := api.New(api.Options{
+		Chat:  chatAgent(issuer, listen),
 		Store: st, Box: box, Upstreams: upstreams,
 		Reload: func() {
 			select {
@@ -109,12 +121,12 @@ func run() error {
 	mux.Handle("/api/", dashboard.Handler())
 	// The middleware verifies the key on every request, so a revoked key stops working
 	// inside an already open session.
-	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.KeyVerifier(st), nil)(endpoint.Handler()))
+	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.Verifier(st, &auth.Internal{Issuer: issuer, Users: st}), nil)(endpoint.Handler()))
 	platform.RegisterHealth(mux, db.PingContext)
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return platform.Serve(ctx, cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux) })
+	g.Go(func() error { return platform.Serve(ctx, listen, mux) })
 	g.Go(func() error { return syncServers(ctx, st, upstreams, reload) })
 	return g.Wait()
 }
@@ -230,4 +242,21 @@ func waitForDatabase(ctx context.Context, dsn string) (*sql.DB, error) {
 		}
 		wait = min(wait*2, 10*time.Second)
 	}
+}
+
+// chatAgent returns the /api/chat handler, or a handler explaining that chat is off when no
+// Gemini key is configured. The agent reaches this process's /mcp over loopback.
+func chatAgent(issuer *auth.TokenIssuer, listen string) http.Handler {
+	key := os.Getenv("GEMINI_API_KEY")
+	if key == "" {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "chat is not configured: the gateway has no GEMINI_API_KEY", http.StatusServiceUnavailable)
+		})
+	}
+	_, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		port = "8080"
+	}
+	provider := &llm.Gemini{APIKey: key, Model: cmp.Or(os.Getenv("GEMINI_MODEL"), "gemini-3.8-flash")}
+	return agent.New(provider, issuer, "http://127.0.0.1:"+port+"/mcp")
 }
