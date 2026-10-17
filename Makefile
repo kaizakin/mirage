@@ -25,7 +25,7 @@ help:
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and API credentials"
 	@echo "  make test-live       Run the WooCommerce client tests against the live store"
 	@echo "  make test-store      Run the migration tests against the cluster Postgres"
-	@echo "  make e2e             Run the gateway failure drills against the deployed platform"
+	@echo "  make e2e             Run the API role checks and failure drills against the deployed platform"
 	@echo "  make status          Check status of the release and pods"
 
 build:
@@ -76,4 +76,5 @@ test-store:
 	test/e2e/store-live.sh
 
 e2e:
+	test/e2e/api-roles.sh
 	test/e2e/drills.sh
