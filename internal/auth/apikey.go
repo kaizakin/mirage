@@ -112,7 +112,17 @@ func VerifyKey(ctx context.Context, store KeyStore, plaintext string) (User, err
 	if rec.Revoked {
 		return User{}, fmt.Errorf("%w: key %s is revoked", ErrInvalidKey, id)
 	}
+	if t, ok := store.(KeyToucher); ok {
+		// Recording use is best effort: a failed write must not fail an authenticated request.
+		_ = t.TouchAPIKey(ctx, id)
+	}
 	return rec.User, nil
+}
+
+// KeyToucher is implemented by stores that record when a key was last used. VerifyKey
+// calls it only after a key verifies, so failed guesses never mark a key used.
+type KeyToucher interface {
+	TouchAPIKey(ctx context.Context, id string) error
 }
 
 func parseKey(s string) (id string, secret []byte, err error) {

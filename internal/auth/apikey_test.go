@@ -137,3 +137,30 @@ func noncanonical(c byte) string {
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 	return string(alphabet[strings.IndexByte(alphabet, c)|1])
 }
+
+type touchingKeys struct {
+	fakeKeys
+	touched []string
+}
+
+func (k *touchingKeys) TouchAPIKey(_ context.Context, id string) error {
+	k.touched = append(k.touched, id)
+	return nil
+}
+
+func TestVerifyKeyRecordsUseOnlyOnSuccess(t *testing.T) {
+	store := &touchingKeys{fakeKeys: fakeKeys{}}
+	valid := issue(t, store.fakeKeys, false)
+	revoked := issue(t, store.fakeKeys, true)
+	_, _ = VerifyKey(t.Context(), store, revoked)
+	_, _ = VerifyKey(t.Context(), store, valid[:len(valid)-1]+"A")
+	if len(store.touched) != 0 {
+		t.Fatalf("failed verifications touched %v", store.touched)
+	}
+	if _, err := VerifyKey(t.Context(), store, valid); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.touched) != 1 || store.touched[0] != valid[3:11] {
+		t.Fatalf("touched = %v, want the valid key's id once", store.touched)
+	}
+}
