@@ -18,3 +18,14 @@ spec:
                 name: {{ include "gateway.fullname" . }}
                 port:
                   name: http
+    # The dashboard calls /api on its own origin, so its session cookie stays first-party.
+    - host: {{ .Values.ingress.dashboardHost }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "gateway.fullname" . }}
+                port:
+                  name: http

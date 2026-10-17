@@ -11,6 +11,9 @@
 //   - SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD, the first admin, and optionally
 //     SEED_ADMIN_API_KEY, a gw_ key for them generated elsewhere.
 //
+// The dashboard API is served under /api. Its session cookie is Secure unless
+// INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set.
+//
 // Seeding only creates what is missing, so operators' later changes survive restarts.
 package main
 
@@ -30,6 +33,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaizakin/mirage/internal/api"
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
@@ -88,7 +92,21 @@ func run() error {
 	defer upstreams.Close()
 	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st})
 
+	// A buffered slot: requests coalesce while a reload is pending.
+	reload := make(chan struct{}, 1)
+	dashboard := api.New(api.Options{
+		Store: st, Box: box, Upstreams: upstreams,
+		Reload: func() {
+			select {
+			case reload <- struct{}{}:
+			default:
+			}
+		},
+		SecureCookie: os.Getenv("INSECURE_COOKIES") != "true",
+	})
+
 	mux := http.NewServeMux()
+	mux.Handle("/api/", dashboard.Handler())
 	// The middleware verifies the key on every request, so a revoked key stops working
 	// inside an already open session.
 	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.KeyVerifier(st), nil)(endpoint.Handler()))
@@ -97,13 +115,15 @@ func run() error {
 	// Every job shares ctx: a signal, or any job failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return platform.Serve(ctx, cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux) })
-	g.Go(func() error { return syncServers(ctx, st, upstreams) })
+	g.Go(func() error { return syncServers(ctx, st, upstreams, reload) })
 	return g.Wait()
 }
 
-// syncServers keeps the upstream manager matching the enabled servers in the database.
-// A failed read is logged and retried: the gateway keeps serving what it already has.
-func syncServers(ctx context.Context, st *store.Store, upstreams *upstream.Manager) error {
+// syncServers keeps the upstream manager matching the enabled servers in the database, on
+// every tick and whenever the API asks after an edit. It is the only caller of Reconcile,
+// whose upstream goroutines live under ctx; an API request's context would end them with
+// the request. A failed read is logged and retried: the gateway keeps serving what it has.
+func syncServers(ctx context.Context, st *store.Store, upstreams *upstream.Manager, reload <-chan struct{}) error {
 	ticker := time.NewTicker(serverPollInterval)
 	defer ticker.Stop()
 	for {
@@ -122,6 +142,7 @@ func syncServers(ctx context.Context, st *store.Store, upstreams *upstream.Manag
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+		case <-reload:
 		}
 	}
 }

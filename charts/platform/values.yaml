@@ -3,3 +3,5 @@ store: {}
 gateway:
   ingress:
     host: gateway.127.0.0.1.nip.io
+  # The local cluster serves plain HTTP, so a Secure cookie would never be sent back.
+  secureCookies: false

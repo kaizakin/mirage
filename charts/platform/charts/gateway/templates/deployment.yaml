@@ -55,6 +55,8 @@ spec:
                 secretKeyRef:
                   name: {{ $fullname }}
                   key: secretbox-key
+            - name: INSECURE_COOKIES
+              value: {{ (not .Values.secureCookies) | quote }}
             - name: SEED_ADMIN_EMAIL
               value: {{ .Values.admin.email | quote }}
             - name: SEED_ADMIN_PASSWORD

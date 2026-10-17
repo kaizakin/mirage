@@ -9,6 +9,11 @@ imageId: ""
 ingress:
   className: traefik
   host: gateway.127.0.0.1.nip.io
+  # The dashboard's host; its /api path routes here.
+  dashboardHost: dash.127.0.0.1.nip.io
+
+# Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
+secureCookies: true
 
 # Base64 of 32 random bytes; seals upstream credentials. Empty keeps the existing one or
 # generates one. Losing it makes stored credentials unreadable.
