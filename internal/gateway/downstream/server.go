@@ -66,9 +66,14 @@ func New(upstreams Upstreams, opts Options) *Server {
 	return s
 }
 
+// sessionTimeout closes sessions left idle, such as those of clients that crashed without
+// ending them; each would otherwise live forever and receive every tools/list_changed.
+const sessionTimeout = 30 * time.Minute
+
 // Handler serves the endpoint over streamable HTTP.
 func (s *Server) Handler() http.Handler {
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.server }, nil)
+	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.server },
+		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout})
 }
 
 // MCPServer exposes the underlying server, for wiring other transports in tests.
@@ -178,7 +183,7 @@ func (s *Server) route(ctx context.Context, slug, tool string, args any) (*mcp.C
 	res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: tool, Arguments: args})
 	switch {
 	case err == nil && res.IsError:
-		return res, audit.ToolError, firstText(res)
+		return res, audit.ToolError, upstream.Truncate(firstText(res))
 	case err == nil:
 		return res, audit.OK, ""
 	case ctx.Err() != nil:
