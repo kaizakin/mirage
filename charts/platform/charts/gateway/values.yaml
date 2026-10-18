@@ -12,6 +12,12 @@ ingress:
   # The dashboard's host; its /api path routes here.
   dashboardHost: dash.127.0.0.1.nip.io
 
+# The chat agent's model. The key comes from a Secret you create (optional: without it,
+# chat answers 503):
+#   kubectl -n <ns> create secret generic <release>-gemini --from-literal=api-key=...
+gemini:
+  model: gemini-3.8-flash
+
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true
 

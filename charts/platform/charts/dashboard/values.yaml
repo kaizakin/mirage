@@ -1,0 +1,20 @@
+image:
+  repository: mirage/dashboard
+  tag: dev
+  pullPolicy: IfNotPresent
+# Image ID of the locally built image (make images sets it); a new value rolls the pod
+# even though the tag stays the same.
+imageId: ""
+
+ingress:
+  className: traefik
+  # /api on this host routes to the gateway (see the gateway chart).
+  host: dash.127.0.0.1.nip.io
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi

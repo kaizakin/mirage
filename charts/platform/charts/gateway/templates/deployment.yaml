@@ -55,6 +55,14 @@ spec:
                 secretKeyRef:
                   name: {{ $fullname }}
                   key: secretbox-key
+            - name: GEMINI_MODEL
+              value: {{ .Values.gemini.model | quote }}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-gemini
+                  key: api-key
+                  optional: true
             - name: INSECURE_COOKIES
               value: {{ (not .Values.secureCookies) | quote }}
             - name: SEED_ADMIN_EMAIL
