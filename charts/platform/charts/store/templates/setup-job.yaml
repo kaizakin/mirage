@@ -48,6 +48,8 @@ spec:
             {{- include "wordpress.dbEnv" . | nindent 12 }}
             - name: SITE_URL
               value: {{ .Values.setup.siteUrl | quote }}
+            - name: STORE_CURRENCY
+              value: {{ .Values.setup.currency | quote }}
             - name: ADMIN_USER
               value: {{ .Values.setup.adminUser | quote }}
             - name: CREDENTIALS_SECRET

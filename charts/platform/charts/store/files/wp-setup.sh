@@ -2,7 +2,7 @@
 # Installs WordPress + WooCommerce on the shared volume and, unless CREDENTIALS_SECRET already exists,
 # writes a fresh application password to /shared/pass. Safe to rerun on every install and upgrade.
 #
-# Env: SITE_URL, ADMIN_USER, ADMIN_PASS, CREDENTIALS_SECRET, WORDPRESS_DB_* (read by wp-config.php).
+# Env: SITE_URL, ADMIN_USER, ADMIN_PASS, CREDENTIALS_SECRET, STORE_CURRENCY, WORDPRESS_DB_* (read by wp-config.php).
 set -eu
 
 until [ -f wp-config.php ]; do
@@ -35,6 +35,7 @@ wp option update siteurl "$SITE_URL"
 wp plugin is-installed woocommerce || wp plugin install woocommerce
 wp plugin is-active woocommerce || wp plugin activate woocommerce
 wp rewrite structure '/%postname%/'
+wp option update woocommerce_currency "$STORE_CURRENCY"
 # New WooCommerce stores default to a "coming soon" page for logged-out visitors; publish the storefront.
 wp option update woocommerce_coming_soon no
 wp option update show_on_front page
