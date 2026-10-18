@@ -98,6 +98,27 @@ func (g *Gemini) Generate(ctx context.Context, req Request) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
+	// Gemini answers 429 and 503 when busy ("high demand"); those clear in seconds, so a
+	// short backoff beats failing the user's whole chat turn.
+	backoff := time.Second
+	for attempt := 1; ; attempt++ {
+		msg, retryable, err := g.generateOnce(ctx, payload)
+		if err == nil || !retryable || attempt == maxAttempts {
+			return msg, err
+		}
+		select {
+		case <-ctx.Done():
+			return Message{}, err
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+}
+
+const maxAttempts = 3
+
+// generateOnce makes one request; retryable reports a transient server-side refusal.
+func (g *Gemini) generateOnce(ctx context.Context, payload []byte) (Message, bool, error) {
 	base := g.BaseURL
 	if base == "" {
 		base = "https://generativelanguage.googleapis.com"
@@ -105,7 +126,7 @@ func (g *Gemini) Generate(ctx context.Context, req Request) (Message, error) {
 	endpoint := base + "/v1beta/models/" + url.PathEscape(g.Model) + ":generateContent"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return Message{}, err
+		return Message{}, false, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	// The key travels in a header, never the URL, so it stays out of proxy and access logs.
@@ -116,21 +137,23 @@ func (g *Gemini) Generate(ctx context.Context, req Request) (Message, error) {
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return Message{}, fmt.Errorf("gemini: %w", err)
+		return Message{}, false, fmt.Errorf("gemini: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return Message{}, fmt.Errorf("gemini: reading response: %w", err)
+		return Message{}, false, fmt.Errorf("gemini: reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		var e struct {
 			Error struct{ Message string } `json:"error"`
 		}
 		_ = json.Unmarshal(raw, &e)
-		return Message{}, fmt.Errorf("gemini: HTTP %d: %s", resp.StatusCode, firstNonEmpty(e.Error.Message, strings.TrimSpace(string(raw))))
+		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable
+		return Message{}, retryable, fmt.Errorf("gemini: HTTP %d: %s", resp.StatusCode, firstNonEmpty(e.Error.Message, strings.TrimSpace(string(raw))))
 	}
-	return decodeGemini(raw)
+	msg, err := decodeGemini(raw)
+	return msg, false, err
 }
 
 func encodeGemini(m Message) (json.RawMessage, error) {

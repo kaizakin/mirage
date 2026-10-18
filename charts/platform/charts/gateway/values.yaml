@@ -16,7 +16,9 @@ ingress:
 # chat answers 503):
 #   kubectl -n <ns> create secret generic <release>-gemini --from-literal=api-key=...
 gemini:
-  model: gemini-3.8-flash
+  # Measured on the free tier (2026-10-25): gemini-3.5-flash answered tool calls in ~2.5s;
+  # gemini-3.8-flash took ~60s or returned 503 "high demand".
+  model: gemini-3.5-flash
 
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true

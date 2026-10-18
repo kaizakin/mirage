@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -106,14 +107,49 @@ func TestGeminiRoundTripsToolCalls(t *testing.T) {
 	}
 }
 
-func TestGeminiReportsAPIErrors(t *testing.T) {
+func TestGeminiRetriesBusyResponsesThenReportsThem(t *testing.T) {
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = io.WriteString(w, `{"error":{"code":429,"message":"Resource has been exhausted"}}`)
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":{"code":503,"message":"This model is currently experiencing high demand."}}`)
 	}))
 	t.Cleanup(srv.Close)
 	_, err := (&Gemini{APIKey: "KEY", Model: "m", BaseURL: srv.URL}).Generate(t.Context(), Request{Messages: []Message{{Role: User, Text: "hi"}}})
-	if err == nil || !strings.Contains(err.Error(), "HTTP 429: Resource has been exhausted") {
+	if err == nil || !strings.Contains(err.Error(), "HTTP 503: This model is currently experiencing high demand.") {
 		t.Fatalf("err = %v", err)
+	}
+	if calls.Load() != maxAttempts {
+		t.Fatalf("made %d attempts, want %d", calls.Load(), maxAttempts)
+	}
+}
+
+func TestGeminiRecoversFromATransientBusyResponse(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]}}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	msg, err := (&Gemini{APIKey: "KEY", Model: "m", BaseURL: srv.URL}).Generate(t.Context(), Request{Messages: []Message{{Role: User, Text: "hi"}}})
+	if err != nil || msg.Text != "hello" {
+		t.Fatalf("Generate = %q, %v", msg.Text, err)
+	}
+}
+
+func TestGeminiDoesNotRetryClientErrors(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":{"code":400,"message":"Invalid JSON payload"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	_, err := (&Gemini{APIKey: "KEY", Model: "m", BaseURL: srv.URL}).Generate(t.Context(), Request{Messages: []Message{{Role: User, Text: "hi"}}})
+	if err == nil || calls.Load() != 1 {
+		t.Fatalf("err = %v after %d attempts; a 400 must not be retried", err, calls.Load())
 	}
 }

@@ -257,6 +257,6 @@ func chatAgent(issuer *auth.TokenIssuer, listen string) http.Handler {
 	if err != nil {
 		port = "8080"
 	}
-	provider := &llm.Gemini{APIKey: key, Model: cmp.Or(os.Getenv("GEMINI_MODEL"), "gemini-3.8-flash")}
+	provider := &llm.Gemini{APIKey: key, Model: cmp.Or(os.Getenv("GEMINI_MODEL"), "gemini-3.5-flash")}
 	return agent.New(provider, issuer, "http://127.0.0.1:"+port+"/mcp")
 }
