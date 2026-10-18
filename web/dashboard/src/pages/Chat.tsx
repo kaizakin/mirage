@@ -4,6 +4,8 @@ import { streamChat } from "../api/chat";
 import { errorMessage, isStatus } from "../api/client";
 import { setSession } from "../session";
 import { applyEvent, history, pendingTurn, type AssistantTurn, type ToolStep, type Turn } from "./chatModel";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 function StepCard({ step }: { step: ToolStep }) {
   const status = step.result === null ? "running" : step.result.isError ? "error" : "ok";
@@ -36,7 +38,13 @@ function AssistantMessage({ turn }: { turn: AssistantTurn }) {
           ))}
         </div>
       )}
-      {turn.answer !== null && <div className="bubble">{turn.answer}</div>}
+      {turn.answer !== null && (
+        // The model answers in Markdown (tables for lists). react-markdown renders no raw HTML,
+        // so model output cannot inject markup.
+        <div className="bubble markdown">
+          <Markdown remarkPlugins={[remarkGfm]}>{turn.answer}</Markdown>
+        </div>
+      )}
       {turn.error !== null && (
         <p className="alert alert-error" role="alert">
           {turn.error}
