@@ -59,6 +59,7 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
       <td>
         <ConfirmButton
           label="Remove"
+          subject={member.email}
           confirmLabel={`Remove ${member.email}`}
           disabled={isSelf}
           busy={remove.isPending}
@@ -154,6 +155,7 @@ function InviteTable() {
                 <td>
                   <ConfirmButton
                     label="Revoke"
+                    subject={`invite for ${invite.email}`}
                     confirmLabel={`Revoke invite for ${invite.email}`}
                     busy={revoke.isPending && revoke.variables === invite.id}
                     onConfirm={() => { revoke.mutate(invite.id); }}

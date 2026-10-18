@@ -153,6 +153,7 @@ function ServerRow({ server }: { server: Server }) {
               <input
                 type="checkbox"
                 role="switch"
+                aria-label={`Enable ${server.slug}`}
                 checked={server.enabled}
                 disabled={toggle.isPending}
                 onChange={(e) => { toggle.mutate(e.target.checked); }}
@@ -163,12 +164,14 @@ function ServerRow({ server }: { server: Server }) {
               type="button"
               className="button button-quiet"
               aria-expanded={editing}
+              aria-label={`Edit ${server.slug}`}
               onClick={() => { setEditing((v) => !v); }}
             >
               Edit
             </button>
             <ConfirmButton
               label="Delete"
+              subject={server.slug}
               confirmLabel={`Delete ${server.slug}`}
               busy={remove.isPending}
               onConfirm={() => { remove.mutate(); }}

@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 
 interface Props {
   label: string;
+  /** What the action applies to; with label it names the button for assistive technology, e.g. "Delete woo". */
+  subject: string;
   confirmLabel: string;
   onConfirm: () => void;
   disabled?: boolean;
   busy?: boolean;
 }
 
-export function ConfirmButton({ label, confirmLabel, onConfirm, disabled = false, busy = false }: Props) {
+export function ConfirmButton({ label, subject, confirmLabel, onConfirm, disabled = false, busy = false }: Props) {
   const [armed, setArmed] = useState(false);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -32,6 +34,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, disabled = false
         ref={triggerRef}
         type="button"
         className="button button-danger-quiet"
+        aria-label={`${label} ${subject}`}
         disabled={disabled || busy}
         onClick={() => {
           toggle(true);

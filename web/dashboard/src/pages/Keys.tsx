@@ -46,7 +46,7 @@ function KeyRow({ apiKey, showOwner }: { apiKey: ApiKey; showOwner: boolean }) {
         {apiKey.revoked_at !== null ? (
           <span className="muted small">Revoked {formatDate(apiKey.revoked_at)}</span>
         ) : (
-          <ConfirmButton label="Revoke" confirmLabel="Revoke key" busy={revoke.isPending} onConfirm={() => { revoke.mutate(); }} />
+          <ConfirmButton label="Revoke" subject={`key ${apiKey.id}`} confirmLabel="Revoke key" busy={revoke.isPending} onConfirm={() => { revoke.mutate(); }} />
         )}
         <MutationError error={revoke.error} />
       </td>
