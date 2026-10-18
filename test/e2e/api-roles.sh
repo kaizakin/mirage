@@ -104,7 +104,7 @@ log "== disabling a server reaches /mcp"
 check "admin disables deepwiki" 204 "$(api "$work/admin" PATCH /api/servers/deepwiki '{"enabled":false}')"
 gone=no
 for _ in {1..10}; do
-  if ! mcp_tools | grep -q '^deepwiki__'; then gone=yes; break; fi
+  if ! mcp_tools | grep '^deepwiki__' >/dev/null; then gone=yes; break; fi
   sleep 0.5
 done
 check "deepwiki's tools leave /mcp within 5s" yes "$gone"

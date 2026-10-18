@@ -48,11 +48,18 @@ post '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 # The standalone stream is where the gateway pushes notifications to this session.
 curl -sS -N -H "Authorization: Bearer $key" -H 'Accept: text/event-stream' -H "Mcp-Session-Id: $session" \
   "$url" >"$work/stream" 2>/dev/null &
-log "session open, $(tools | wc -l) tools"
+# Back-to-back runs: the previous run's killed pod may still be reconnecting.
+for _ in {1..60}; do
+  [[ $(tools | wc -l) -ge 10 ]] && break
+  sleep 1
+done
+[[ $(tools | wc -l) -ge 10 ]] || fail "not every upstream is connected: $(tools | tr '\n' ' ')"
+log "session open, $(tools | wc -l) tools from all three upstreams"
 
 log "== drill 1: delete the woo-mcp pod mid-session"
-kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=woo-mcp --wait=false >/dev/null
-sleep 2
+# --wait: a terminating pod keeps serving through its graceful shutdown, so the outage
+# starts only once it is gone.
+kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=woo-mcp --wait=true >/dev/null
 currency=$(call currency__convert '{"amount":10,"from":"USD","to":"EUR"}')
 woo=$(call woo__list_products '{}')
 log "currency__convert   -> $currency"
@@ -90,19 +97,19 @@ notifications() { grep -c 'notifications/tools/list_changed' "$work/stream" || t
 before=$(notifications)
 psql_gateway "UPDATE servers SET enabled = false WHERE slug = 'deepwiki'"
 for _ in {1..20}; do
-  ! tools | grep -q '^deepwiki__' && break
+  ! tools | grep '^deepwiki__' >/dev/null && break
   sleep 1
 done
-tools | grep -q '^deepwiki__' && fail "deepwiki tools still listed after disabling it"
+tools | grep '^deepwiki__' >/dev/null && fail "deepwiki tools still listed after disabling it"
 sleep 2
 ((before < $(notifications))) || fail "no tools/list_changed reached the session"
 log "deepwiki gone from tools/list ($(tools | wc -l) tools); tools/list_changed pushed to the session"
 psql_gateway "UPDATE servers SET enabled = true WHERE slug = 'deepwiki'"
 for _ in {1..30}; do
-  tools | grep -q '^deepwiki__' && break
+  tools | grep '^deepwiki__' >/dev/null && break
   sleep 1
 done
-tools | grep -q '^deepwiki__' || fail "deepwiki did not come back after re-enabling it"
+tools | grep '^deepwiki__' >/dev/null || fail "deepwiki did not come back after re-enabling it"
 log "deepwiki re-enabled: back in tools/list ($(tools | wc -l) tools)"
 
 log "== audit rows written during the drills"
