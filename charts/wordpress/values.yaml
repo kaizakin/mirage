@@ -1,0 +1,53 @@
+replicaCount: 1
+
+image:
+  repository: wordpress
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: traefik
+  host: shop.127.0.0.1.nip.io
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+# Subchart values for MySQL (umbrella dependency)
+mysql:
+  enabled: true
+  replicaCount: 1
+  mysql:
+    database: "app_db"
+    user: "app_user"
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+externalDatabase:
+  host: ""
+  port: 3306
+  database: "app_db"
+  user: "app_user"
+  existingSecret: ""
