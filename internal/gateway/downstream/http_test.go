@@ -43,7 +43,7 @@ func TestAuditRowCarriesTheAuthenticatedUserOverHTTP(t *testing.T) {
 	}
 	user := auth.User{ID: 42, Email: "ada@example.com", Role: "admin"}
 	store := oneKey{id: key.ID, rec: auth.KeyRecord{User: user, SecretHash: key.SecretHash}}
-	srv := httptest.NewServer(sdkauth.RequireBearerToken(auth.KeyVerifier(store), nil)(h.gw.Handler()))
+	srv := httptest.NewServer(sdkauth.RequireBearerToken(auth.Verifier(store, nil), nil)(h.gw.Handler()))
 	t.Cleanup(srv.Close)
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "claude"}, nil)
