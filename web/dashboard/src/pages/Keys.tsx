@@ -5,7 +5,8 @@ import type { ApiKey, CreatedKey } from "../api/types";
 import { Badge } from "../components/Badge";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { CopyField } from "../components/CopyField";
-import { ErrorNotice, Loading, MutationError } from "../components/States";
+import { Icon } from "../components/Icon";
+import { EmptyState, ErrorNotice, Loading, MutationError } from "../components/States";
 import { formatDate } from "../format";
 import { useCurrentUser } from "../session";
 
@@ -35,14 +36,16 @@ function KeyRow({ apiKey, showOwner }: { apiKey: ApiKey; showOwner: boolean }) {
 
   return (
     <tr>
-      <td className="mono">{apiKey.id}</td>
-      {showOwner && <td>{apiKey.user_email}</td>}
+      <td>
+        <span className="mono key-id">{apiKey.id}</span>
+        {showOwner && <span className="muted small block">{apiKey.user_email}</span>}
+      </td>
       <td>
         {apiKey.revoked_at === null ? <Badge tone="green">active</Badge> : <Badge tone="grey">revoked</Badge>}
       </td>
-      <td className="nowrap">{formatDate(apiKey.created_at)}</td>
-      <td className="nowrap">{apiKey.last_used_at ? formatDate(apiKey.last_used_at) : <span className="muted">Never</span>}</td>
-      <td>
+      <td className="date">{formatDate(apiKey.created_at)}</td>
+      <td className="date">{apiKey.last_used_at ? formatDate(apiKey.last_used_at) : <span className="muted">Never</span>}</td>
+      <td className="actions-cell">
         {apiKey.revoked_at !== null ? (
           <span className="muted small">Revoked {formatDate(apiKey.revoked_at)}</span>
         ) : (
@@ -77,6 +80,7 @@ export function KeysPage() {
           <p className="muted">Keys let MCP clients call tools through the gateway as you.</p>
         </div>
         <button type="button" className="button button-primary" disabled={generate.isPending} onClick={() => { generate.mutate(); }}>
+          <Icon name="plus" />
           {generate.isPending ? "Generating…" : "Generate key"}
         </button>
       </div>
@@ -93,18 +97,21 @@ export function KeysPage() {
       ) : keys.isError ? (
         <ErrorNotice error={keys.error} />
       ) : keys.data.length === 0 ? (
-        <p className="empty-state muted">No keys yet.</p>
+        <EmptyState icon="key" title="No keys yet">
+          Generate a key to connect an MCP client such as Claude Code.
+        </EmptyState>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th scope="col">Key ID</th>
-                {showAll && <th scope="col">User</th>}
+                <th scope="col">{showAll ? "Key ID · owner" : "Key ID"}</th>
                 <th scope="col">Status</th>
                 <th scope="col">Created</th>
                 <th scope="col">Last used</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="actions-cell">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>

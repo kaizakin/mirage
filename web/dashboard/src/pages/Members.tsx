@@ -41,8 +41,15 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
   return (
     <tr>
       <td>
-        {member.email}
-        {isSelf && <span className="muted small"> (you)</span>}
+        <span className="person">
+          <span className="avatar avatar-small" aria-hidden="true">
+            {member.email.charAt(0).toUpperCase()}
+          </span>
+          <span>
+            {member.email}
+            {isSelf && <span className="muted small"> (you)</span>}
+          </span>
+        </span>
       </td>
       <td>
         <label htmlFor={selectId} className="visually-hidden">
@@ -55,8 +62,8 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
           onChange={(role) => { setRole.mutate(role); }}
         />
       </td>
-      <td className="nowrap">{formatDate(member.created_at)}</td>
-      <td>
+      <td className="date">{formatDate(member.created_at)}</td>
+      <td className="actions-cell">
         <ConfirmButton
           label="Remove"
           subject={member.email}
@@ -92,24 +99,29 @@ function InviteForm() {
   };
 
   return (
-    <form className="card" onSubmit={submit} aria-labelledby="invite-title">
+    <form className="card invite-card" onSubmit={submit} aria-labelledby="invite-title">
       <h2 id="invite-title">Invite member</h2>
-      <div className="form-grid">
-        <div className="field">
+      <div className="invite-row">
+        <div className="field invite-email">
           <label htmlFor="invite-email">Email</label>
-          <input id="invite-email" type="email" required value={email} onChange={(e) => { setEmail(e.target.value); }} />
+          <input
+            id="invite-email"
+            type="email"
+            required
+            placeholder="name@company.com"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); }}
+          />
         </div>
         <div className="field">
           <label htmlFor="invite-role">Role</label>
           <RoleSelect id="invite-role" value={role} onChange={setRole} />
         </div>
-      </div>
-      <MutationError error={invite.error} />
-      <div className="actions">
         <button type="submit" className="button button-primary" disabled={invite.isPending}>
           {invite.isPending ? "Creating invite…" : "Create invite"}
         </button>
       </div>
+      <MutationError error={invite.error} />
       {created && (
         <div className="secret" role="region" aria-label="New invite link">
           <p className="alert alert-warning">
@@ -132,7 +144,7 @@ function InviteTable() {
 
   if (invites.isPending) return <Loading />;
   if (invites.isError) return <ErrorNotice error={invites.error} />;
-  if (invites.data.length === 0) return <p className="muted">No pending invites.</p>;
+  if (invites.data.length === 0) return <p className="muted quiet-empty">No pending invites.</p>;
   return (
     <>
       <MutationError error={revoke.error} />
@@ -143,16 +155,20 @@ function InviteTable() {
               <th scope="col">Email</th>
               <th scope="col">Role</th>
               <th scope="col">Expires</th>
-              <th scope="col">Actions</th>
+              <th scope="col" className="actions-cell">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {invites.data.map((invite) => (
               <tr key={invite.id}>
                 <td>{invite.email}</td>
-                <td>{invite.role}</td>
-                <td className="nowrap">{formatDate(invite.expires_at)}</td>
                 <td>
+                  <span className={`role role-${invite.role}`}>{invite.role}</span>
+                </td>
+                <td className="date">{formatDate(invite.expires_at)}</td>
+                <td className="actions-cell">
                   <ConfirmButton
                     label="Revoke"
                     subject={`invite for ${invite.email}`}
@@ -182,6 +198,8 @@ export function MembersPage() {
           <p className="muted">People who can sign in to the dashboard and hold gateway keys.</p>
         </div>
       </div>
+      <InviteForm />
+      <h2 className="section-title">Members</h2>
       {members.isPending ? (
         <Loading />
       ) : members.isError ? (
@@ -194,7 +212,9 @@ export function MembersPage() {
                 <th scope="col">Email</th>
                 <th scope="col">Role</th>
                 <th scope="col">Joined</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className="actions-cell">
+                Actions
+              </th>
               </tr>
             </thead>
             <tbody>
@@ -207,7 +227,6 @@ export function MembersPage() {
       )}
       <h2 className="section-title">Pending invites</h2>
       <InviteTable />
-      <InviteForm />
     </section>
   );
 }
