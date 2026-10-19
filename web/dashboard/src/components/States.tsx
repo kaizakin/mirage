@@ -1,37 +1,51 @@
+import type { ReactNode } from "react";
 import { errorMessage, isStatus } from "../api/client";
+import { Icon, type IconName } from "./Icon";
 
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
-    <p className="muted loading" role="status">
+    <p className="loading" role="status">
       <span className="spinner" aria-hidden="true" />
       {label}
     </p>
   );
 }
 
-export function AdminsOnly() {
+export function EmptyState({ icon, title, children }: { icon: IconName; title: string; children?: ReactNode }) {
   return (
     <div className="empty-state">
-      <h2>Admins only</h2>
-      <p className="muted">Your account is a member. Ask an admin if you need access to this page.</p>
+      <span className="empty-icon">
+        <Icon name={icon} size={20} />
+      </span>
+      <h2>{title}</h2>
+      {children && <p className="muted">{children}</p>}
     </div>
+  );
+}
+
+export function AdminsOnly() {
+  return (
+    <EmptyState icon="lock" title="Admins only">
+      Your account is a member. Ask an admin if you need access to this page.
+    </EmptyState>
+  );
+}
+
+export function Alert({ children }: { children: ReactNode }) {
+  return (
+    <p className="alert alert-error" role="alert">
+      <Icon name="alert" />
+      <span>{children}</span>
+    </p>
   );
 }
 
 export function ErrorNotice({ error }: { error: unknown }) {
   if (isStatus(error, 403)) return <AdminsOnly />;
-  return (
-    <p className="alert alert-error" role="alert">
-      {errorMessage(error)}
-    </p>
-  );
+  return <Alert>{errorMessage(error)}</Alert>;
 }
 
 export function MutationError({ error }: { error: unknown }) {
   if (error === null || error === undefined) return null;
-  return (
-    <p className="alert alert-error" role="alert">
-      {errorMessage(error)}
-    </p>
-  );
+  return <Alert>{errorMessage(error)}</Alert>;
 }
