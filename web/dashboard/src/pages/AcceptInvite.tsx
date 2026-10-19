@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type SubmitEvent } from "react";
+import { useRef, useState, type SubmitEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { errorMessage, isStatus } from "../api/client";
 import { api } from "../api/endpoints";
@@ -13,6 +13,16 @@ function acceptError(error: unknown): string {
   return errorMessage(error);
 }
 
+// passwordProblem says what is wrong with a new password, or returns null when it is fine.
+function passwordProblem(password: string, confirm: string): string | null {
+  if (password.length < minLength) {
+    const short = minLength - password.length;
+    return `Your password needs at least ${minLength} characters. Add ${short} more.`;
+  }
+  if (password !== confirm) return "The two passwords do not match.";
+  return null;
+}
+
 export function AcceptInvitePage() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
@@ -20,7 +30,8 @@ export function AcceptInvitePage() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [mismatch, setMismatch] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const passwordField = useRef<HTMLInputElement>(null);
 
   const accept = useMutation({
     mutationFn: () => api.acceptInvite(token, password),
@@ -32,11 +43,12 @@ export function AcceptInvitePage() {
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault();
-    if (password !== confirm) {
-      setMismatch(true);
+    const found = passwordProblem(password, confirm);
+    setProblem(found);
+    if (found) {
+      passwordField.current?.focus();
       return;
     }
-    setMismatch(false);
     accept.mutate();
   };
 
@@ -54,23 +66,24 @@ export function AcceptInvitePage() {
 
   return (
     <main className="auth-page">
-      <form className="card auth-card" onSubmit={submit} aria-labelledby="accept-title">
+      <form className="card auth-card" onSubmit={submit} aria-labelledby="accept-title" noValidate>
         <h1 id="accept-title">Join Mirage</h1>
         <p className="muted">Choose a password for your new account.</p>
         <div className="field">
           <label htmlFor="accept-password">Password</label>
           <input
+            ref={passwordField}
             id="accept-password"
             type="password"
             autoComplete="new-password"
             required
-            minLength={minLength}
-            aria-describedby="accept-password-hint"
+            aria-invalid={problem !== null && password.length < minLength}
+            aria-describedby="accept-password-rule"
             value={password}
-            onChange={(e) => { setPassword(e.target.value); }}
+            onChange={(e) => { setPassword(e.target.value); setProblem(null); }}
           />
-          <span id="accept-password-hint" className="hint">
-            At least {minLength} characters.
+          <span id="accept-password-rule" className={`rule${password.length >= minLength ? " rule-met" : ""}`}>
+            {password.length >= minLength ? "✓ " : ""}At least {minLength} characters ({password.length}/{minLength})
           </span>
         </div>
         <div className="field">
@@ -80,24 +93,21 @@ export function AcceptInvitePage() {
             type="password"
             autoComplete="new-password"
             required
-            aria-invalid={mismatch}
+            aria-invalid={problem !== null && password.length >= minLength && password !== confirm}
             value={confirm}
-            onChange={(e) => { setConfirm(e.target.value); }}
+            onChange={(e) => { setConfirm(e.target.value); setProblem(null); }}
           />
         </div>
-        {mismatch && (
-          <p className="alert alert-error" role="alert">
-            The passwords do not match.
-          </p>
-        )}
-        {accept.isError && (
-          <p className="alert alert-error" role="alert">
-            {acceptError(accept.error)}
-          </p>
-        )}
-        <button type="submit" className="button button-primary" disabled={accept.isPending}>
-          {accept.isPending ? "Creating account…" : "Create account"}
-        </button>
+        <div className="form-actions">
+          {(problem ?? accept.isError) && (
+            <p className="alert alert-error" role="alert">
+              {problem ?? acceptError(accept.error)}
+            </p>
+          )}
+          <button type="submit" className="button button-primary" disabled={accept.isPending}>
+            {accept.isPending ? "Creating account…" : "Create account"}
+          </button>
+        </div>
         <p className="muted small">
           Already have an account? <Link to="/login">Sign in</Link>
         </p>

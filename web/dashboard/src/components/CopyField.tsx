@@ -1,8 +1,9 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export function CopyField({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
   const id = useId();
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  const field = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (copied === "idle") return;
@@ -16,7 +17,15 @@ export function CopyField({ label, value, multiline = false }: { label: string; 
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(value);
+      // navigator.clipboard exists only in secure contexts, and the local cluster serves the
+      // dashboard over plain HTTP. There the selected field is copied the older way.
+      if (window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        field.current?.select();
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the only copy API outside secure contexts
+        if (!document.execCommand("copy")) throw new Error("copy refused");
+      }
       setCopied("copied");
     } catch {
       setCopied("failed");
@@ -28,9 +37,9 @@ export function CopyField({ label, value, multiline = false }: { label: string; 
       <label htmlFor={id}>{label}</label>
       <div className="copy-row">
         {multiline ? (
-          <textarea id={id} readOnly value={value} rows={3} onFocus={(e) => { e.currentTarget.select(); }} />
+          <textarea ref={field} id={id} readOnly value={value} rows={3} onFocus={(e) => { e.currentTarget.select(); }} />
         ) : (
-          <input id={id} readOnly value={value} onFocus={(e) => { e.currentTarget.select(); }} />
+          <input ref={field} id={id} readOnly value={value} onFocus={(e) => { e.currentTarget.select(); }} />
         )}
         <button type="button" className="button" onClick={() => void copy()}>
           Copy

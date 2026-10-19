@@ -818,3 +818,22 @@ tbody tr.subrow:hover td {
 .markdown th, .markdown td { border: 1px solid #d8dbe3; padding: 0.3em 0.6em; text-align: left; }
 .markdown th { background: #f3f4f7; }
 .markdown code { font-size: 0.9em; }
+
+.rule {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.rule-met {
+  color: var(--success, #1f7a3d);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.form-actions .alert {
+  margin: 0;
+}
