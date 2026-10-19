@@ -66,6 +66,25 @@ Resolve the MySQL hostname
 {{- end }}
 
 {{/*
+DB env vars read by the image's wp-config.php; shared by the Deployment and the setup Job
+*/}}
+{{- define "wordpress.dbEnv" -}}
+{{- $dbName := ternary .Values.mysql.mysql.database .Values.externalDatabase.database .Values.mysql.enabled -}}
+{{- $dbUser := ternary .Values.mysql.mysql.user .Values.externalDatabase.user .Values.mysql.enabled -}}
+- name: WORDPRESS_DB_HOST
+  value: "{{ include "wordpress.mysql.host" . }}:3306"
+- name: WORDPRESS_DB_NAME
+  value: {{ $dbName | default "app_db" | quote }}
+- name: WORDPRESS_DB_USER
+  value: {{ $dbUser | default "app_user" | quote }}
+- name: WORDPRESS_DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "wordpress.mysql.secretName" . }}
+      key: mysql-password
+{{- end }}
+
+{{/*
 Resolve the MySQL secret name
 */}}
 {{- define "wordpress.mysql.secretName" -}}
