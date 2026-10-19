@@ -6,10 +6,10 @@ metadata:
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.type | default "ClusterIP" }}
+  type: {{ .Values.wordpress.service.type | default "ClusterIP" }}
   ports:
     - name: http
-      port: {{ .Values.service.port | default 80 }}
+      port: {{ .Values.wordpress.service.port | default 80 }}
       targetPort: http
       protocol: TCP
   selector:

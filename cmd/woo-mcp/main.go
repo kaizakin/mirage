@@ -1,4 +1,4 @@
-// Command mirage serves an echo MCP tool over streamable HTTP at http://127.0.0.1:8080/mcp.
+// Command woo-mcp serves an echo MCP tool over streamable HTTP at http://127.0.0.1:8080/mcp.
 package main
 
 import (

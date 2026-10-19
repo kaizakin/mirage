@@ -1,0 +1,2 @@
+# Subchart overrides go under the subchart's name; each subchart's own values.yaml holds its defaults.
+store: {}

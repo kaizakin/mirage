@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount | default 1 }}
+  replicas: {{ .Values.wordpress.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "wordpress.selectorLabels" . | nindent 6 }}
@@ -36,7 +36,7 @@ spec:
               echo "MySQL is reachable and accepting connections!"
           env:
             - name: WORDPRESS_DB_HOST
-              value: "{{ include "wordpress.mysql.host" . }}:3306"
+              value: "{{ include "wordpress.dbHost" . }}:3306"
           resources:
             requests:
               cpu: 50m
@@ -46,8 +46,8 @@ spec:
               memory: 64Mi
       containers:
         - name: wordpress
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          image: "{{ .Values.wordpress.image.repository }}:{{ .Values.wordpress.image.tag }}"
+          imagePullPolicy: {{ .Values.wordpress.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
               containerPort: 80
@@ -56,11 +56,11 @@ spec:
             {{- include "wordpress.dbEnv" . | nindent 12 }}
           resources:
             requests:
-              cpu: {{ .Values.resources.requests.cpu | default "200m" | quote }}
-              memory: {{ .Values.resources.requests.memory | default "256Mi" | quote }}
+              cpu: {{ .Values.wordpress.resources.requests.cpu | default "200m" | quote }}
+              memory: {{ .Values.wordpress.resources.requests.memory | default "256Mi" | quote }}
             limits:
-              cpu: {{ .Values.resources.limits.cpu | default "1000m" | quote }}
-              memory: {{ .Values.resources.limits.memory | default "512Mi" | quote }}
+              cpu: {{ .Values.wordpress.resources.limits.cpu | default "1000m" | quote }}
+              memory: {{ .Values.wordpress.resources.limits.memory | default "512Mi" | quote }}
           startupProbe:
             httpGet:
               path: /wp-login.php
@@ -96,7 +96,7 @@ spec:
           configMap:
             name: {{ include "wordpress.fullname" . }}-mu-plugins
         - name: data
-          {{- if .Values.persistence.enabled }}
+          {{- if .Values.wordpress.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "wordpress.fullname" . }}
           {{- else }}
