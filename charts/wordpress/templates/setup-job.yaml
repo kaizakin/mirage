@@ -48,6 +48,8 @@ spec:
             {{- include "wordpress.dbEnv" . | nindent 12 }}
             - name: SITE_URL
               value: {{ .Values.setup.siteUrl | quote }}
+            - name: ADMIN_USER
+              value: {{ .Values.setup.adminUser | quote }}
             - name: ADMIN_PASS
               valueFrom:
                 secretKeyRef:
@@ -67,8 +69,13 @@ spec:
               done
 
               if ! wp core is-installed; then
-                wp core install --url="$SITE_URL" --title=Shop --admin_user=admin \
+                wp core install --url="$SITE_URL" --title=Shop --admin_user="$ADMIN_USER" \
                   --admin_password="$ADMIN_PASS" --admin_email=admin@example.com --skip-email
+              fi
+              # A site installed before this hook existed keeps its own administrators; don't invent one
+              if ! wp user get "$ADMIN_USER" --field=ID >/dev/null 2>&1; then
+                echo "WordPress has no user '$ADMIN_USER'; set setup.adminUser to an existing administrator" >&2
+                exit 1
               fi
               # install only sets the URL once; keep it in sync with values on every upgrade
               wp option update home "$SITE_URL"
@@ -77,9 +84,9 @@ spec:
               wp plugin is-installed woocommerce || wp plugin install woocommerce
               wp plugin is-active woocommerce || wp plugin activate woocommerce
               wp rewrite structure '/%postname%/'
-              wp wc payment_gateway update cod --enabled=true --user=admin
+              wp wc payment_gateway update cod --enabled=true --user="$ADMIN_USER"
               if [ -z "$(wp post list --post_type=product --name=seed-mug --post_status=any --format=ids)" ]; then
-                wp wc product create --name="Seed Mug" --slug=seed-mug --regular_price=299 --user=admin
+                wp wc product create --name="Seed Mug" --slug=seed-mug --regular_price=299 --user="$ADMIN_USER"
               fi
 
               if [ -s /existing/password ]; then
@@ -88,10 +95,10 @@ spec:
               fi
               # The plaintext of any earlier "mcp" password is lost (a previous run died before saving it), so revoke it;
               # WordPress also rejects a duplicate name
-              for uuid in $(wp user application-password list admin --name=mcp --field=uuid); do
-                wp user application-password delete admin "$uuid"
+              for uuid in $(wp user application-password list "$ADMIN_USER" --name=mcp --field=uuid); do
+                wp user application-password delete "$ADMIN_USER" "$uuid"
               done
-              wp user application-password create admin mcp --porcelain > /shared/pass
+              wp user application-password create "$ADMIN_USER" mcp --porcelain > /shared/pass
           volumeMounts:
             - name: data
               mountPath: /var/www/html
@@ -128,7 +135,7 @@ spec:
               fi
               kubectl create secret generic {{ .Values.setup.credentialsSecret }} \
                 --from-literal=url="$SITE_URL" \
-                --from-literal=username=admin \
+                --from-literal=username={{ .Values.setup.adminUser | quote }} \
                 --from-file=password=/shared/pass \
                 --dry-run=client -o yaml | kubectl apply -f -
           volumeMounts:
