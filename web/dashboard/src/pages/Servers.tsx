@@ -4,7 +4,8 @@ import { api } from "../api/endpoints";
 import type { Server, ServerStatus } from "../api/types";
 import { Badge, type Tone } from "../components/Badge";
 import { ConfirmButton } from "../components/ConfirmButton";
-import { ErrorNotice, Loading, MutationError } from "../components/States";
+import { Icon } from "../components/Icon";
+import { EmptyState, ErrorNotice, Loading, MutationError } from "../components/States";
 import { formatDate } from "../format";
 import { ServerFields } from "./ServerFields";
 import { draftFrom, emptyDraft, toNewServer, toPatch } from "./serverForm";
@@ -95,6 +96,7 @@ function ToolList({ server }: { server: Server }) {
   return (
     <details className="tools">
       <summary>
+        <Icon name="chevron" size={14} />
         {server.tools.length} {server.tools.length === 1 ? "tool" : "tools"}
       </summary>
       <dl>
@@ -111,7 +113,17 @@ function ToolList({ server }: { server: Server }) {
   );
 }
 
-function ServerRow({ server }: { server: Server }) {
+function AuthSummary({ server }: { server: Server }) {
+  if (server.auth_type === "none") return <span className="muted">No auth</span>;
+  return (
+    <span>
+      {server.auth_type === "bearer" ? "Bearer" : <code>{server.auth_header}</code>}
+      <span className="muted"> · {server.has_credential ? "credential stored" : "no credential"}</span>
+    </span>
+  );
+}
+
+function ServerCard({ server }: { server: Server }) {
   const client = useQueryClient();
   const [editing, setEditing] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: serversKey });
@@ -123,71 +135,72 @@ function ServerRow({ server }: { server: Server }) {
   const error = toggle.error ?? remove.error;
 
   return (
-    <>
-      <tr>
-        <td>
-          <strong>{server.slug}</strong>
-          <div className="muted small mono">{server.url}</div>
-        </td>
-        <td>
+    <li className={`server server-${server.status}`}>
+      <div className="server-main">
+        <div className="server-id">
+          <h2 className="server-slug">{server.slug}</h2>
           <Badge tone={statusTone[server.status]}>{server.status}</Badge>
-          {server.reason && <div className="reason">{server.reason}</div>}
-        </td>
-        <td>
-          {server.auth_type === "none" ? (
-            <span className="muted">None</span>
-          ) : (
-            <>
-              {server.auth_type === "bearer" ? "Bearer" : <code>{server.auth_header}</code>}
-              <div className="muted small">{server.has_credential ? "Credential stored" : "No credential"}</div>
-            </>
-          )}
-        </td>
-        <td>
-          <ToolList server={server} />
-        </td>
-        <td className="nowrap">{formatDate(server.created_at)}</td>
-        <td>
-          <div className="row-actions">
-            <label className="switch">
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label={`Enable ${server.slug}`}
-                checked={server.enabled}
-                disabled={toggle.isPending}
-                onChange={(e) => { toggle.mutate(e.target.checked); }}
-              />
-              <span>{server.enabled ? "Enabled" : "Disabled"}</span>
-            </label>
-            <button
-              type="button"
-              className="button button-quiet"
-              aria-expanded={editing}
-              aria-label={`Edit ${server.slug}`}
-              onClick={() => { setEditing((v) => !v); }}
-            >
-              Edit
-            </button>
-            <ConfirmButton
-              label="Delete"
-              subject={server.slug}
-              confirmLabel={`Delete ${server.slug}`}
-              busy={remove.isPending}
-              onConfirm={() => { remove.mutate(); }}
+        </div>
+        <div className="server-url mono truncate" title={server.url}>
+          {server.url}
+        </div>
+        <div className="row-actions">
+          <label className="switch">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label={`Enable ${server.slug}`}
+              checked={server.enabled}
+              disabled={toggle.isPending}
+              onChange={(e) => { toggle.mutate(e.target.checked); }}
             />
-          </div>
-          <MutationError error={error} />
-        </td>
-      </tr>
-      {editing && (
-        <tr className="subrow">
-          <td colSpan={6}>
-            <EditServerForm server={server} onDone={() => { setEditing(false); }} />
-          </td>
-        </tr>
+            <span>{server.enabled ? "Enabled" : "Disabled"}</span>
+          </label>
+          <button
+            type="button"
+            className="button button-quiet"
+            aria-expanded={editing}
+            aria-label={`Edit ${server.slug}`}
+            onClick={() => { setEditing((v) => !v); }}
+          >
+            Edit
+          </button>
+          <ConfirmButton
+            label="Delete"
+            subject={server.slug}
+            confirmLabel={`Delete ${server.slug}`}
+            busy={remove.isPending}
+            onConfirm={() => { remove.mutate(); }}
+          />
+        </div>
+      </div>
+      {server.reason && (
+        <p className="reason">
+          <Icon name="alert" size={14} />
+          <span>{server.reason}</span>
+        </p>
       )}
-    </>
+      <dl className="server-meta">
+        <div>
+          <dt>Auth</dt>
+          <dd>
+            <AuthSummary server={server} />
+          </dd>
+        </div>
+        <div>
+          <dt>Added</dt>
+          <dd>{formatDate(server.created_at)}</dd>
+        </div>
+        <div className="server-tools">
+          <dt>Tools</dt>
+          <dd>
+            <ToolList server={server} />
+          </dd>
+        </div>
+      </dl>
+      <MutationError error={error} />
+      {editing && <EditServerForm server={server} onDone={() => { setEditing(false); }} />}
+    </li>
   );
 }
 
@@ -204,6 +217,7 @@ export function ServersPage() {
         </div>
         {!adding && (
           <button type="button" className="button button-primary" onClick={() => { setAdding(true); }}>
+            <Icon name="plus" />
             Add server
           </button>
         )}
@@ -214,27 +228,15 @@ export function ServersPage() {
       ) : servers.isError && !servers.data ? (
         <ErrorNotice error={servers.error} />
       ) : servers.data.length === 0 ? (
-        <p className="empty-state muted">No servers yet. Add one to expose its tools through the gateway.</p>
+        <EmptyState icon="servers" title="No servers yet">
+          Add one to expose its tools through the gateway.
+        </EmptyState>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Server</th>
-                <th scope="col">Status</th>
-                <th scope="col">Auth</th>
-                <th scope="col">Tools</th>
-                <th scope="col">Added</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {servers.data.map((server) => (
-                <ServerRow key={server.slug} server={server} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="server-list" aria-label="Servers">
+          {servers.data.map((server) => (
+            <ServerCard key={server.slug} server={server} />
+          ))}
+        </ul>
       )}
     </section>
   );
