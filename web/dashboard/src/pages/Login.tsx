@@ -3,7 +3,8 @@ import { useState, type SubmitEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { errorMessage, isStatus } from "../api/client";
 import { api } from "../api/endpoints";
-import { Loading } from "../components/States";
+import { BrandMark } from "../components/Icon";
+import { Alert, Loading } from "../components/States";
 import { setSession, useMe } from "../session";
 
 function redirectTarget(state: unknown): string {
@@ -41,7 +42,11 @@ export function LoginPage() {
   return (
     <main className="auth-page">
       <form className="card auth-card" onSubmit={submit} aria-labelledby="login-title">
-        <h1 id="login-title">Sign in to Mirage</h1>
+        <div className="auth-head">
+          <BrandMark size={40} />
+          <h1 id="login-title">Sign in to Mirage</h1>
+          <p className="muted">The admin console for your MCP gateway.</p>
+        </div>
         <div className="field">
           <label htmlFor="login-email">Email</label>
           <input
@@ -64,11 +69,7 @@ export function LoginPage() {
             onChange={(e) => { setPassword(e.target.value); }}
           />
         </div>
-        {login.isError && (
-          <p className="alert alert-error" role="alert">
-            {isStatus(login.error, 401) ? "Wrong email or password." : errorMessage(login.error)}
-          </p>
-        )}
+        {login.isError && <Alert>{isStatus(login.error, 401) ? "Wrong email or password." : errorMessage(login.error)}</Alert>}
         <button type="submit" className="button button-primary" disabled={login.isPending}>
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>

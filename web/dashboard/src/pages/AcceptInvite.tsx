@@ -3,6 +3,8 @@ import { useRef, useState, type SubmitEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { errorMessage, isStatus } from "../api/client";
 import { api } from "../api/endpoints";
+import { BrandMark } from "../components/Icon";
+import { Alert } from "../components/States";
 import { setSession } from "../session";
 
 const minLength = 12;
@@ -56,8 +58,11 @@ export function AcceptInvitePage() {
     return (
       <main className="auth-page">
         <div className="card auth-card">
-          <h1>Invite link incomplete</h1>
-          <p className="muted">This link has no invite token. Open the full link an admin sent you.</p>
+          <div className="auth-head">
+            <BrandMark size={40} />
+            <h1>Invite link incomplete</h1>
+            <p className="muted">This link has no invite token. Open the full link an admin sent you.</p>
+          </div>
           <Link to="/login">Go to sign in</Link>
         </div>
       </main>
@@ -67,8 +72,11 @@ export function AcceptInvitePage() {
   return (
     <main className="auth-page">
       <form className="card auth-card" onSubmit={submit} aria-labelledby="accept-title" noValidate>
-        <h1 id="accept-title">Join Mirage</h1>
-        <p className="muted">Choose a password for your new account.</p>
+        <div className="auth-head">
+          <BrandMark size={40} />
+          <h1 id="accept-title">Join Mirage</h1>
+          <p className="muted">Choose a password for your new account.</p>
+        </div>
         <div className="field">
           <label htmlFor="accept-password">Password</label>
           <input
@@ -99,16 +107,12 @@ export function AcceptInvitePage() {
           />
         </div>
         <div className="form-actions">
-          {(problem ?? accept.isError) && (
-            <p className="alert alert-error" role="alert">
-              {problem ?? acceptError(accept.error)}
-            </p>
-          )}
+          {(problem ?? accept.isError) && <Alert>{problem ?? acceptError(accept.error)}</Alert>}
           <button type="submit" className="button button-primary" disabled={accept.isPending}>
             {accept.isPending ? "Creating account…" : "Create account"}
           </button>
         </div>
-        <p className="muted small">
+        <p className="muted small auth-foot">
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </form>
