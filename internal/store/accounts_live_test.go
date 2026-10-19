@@ -46,6 +46,30 @@ func TestLiveSessionsExpireAndEnd(t *testing.T) {
 	}
 }
 
+func TestLiveSetPasswordEndsSessions(t *testing.T) {
+	s := migrated(t)
+	u, err := s.CreateUser(t.Context(), "ada@example.com", "old", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := []byte("session-hash")
+	if err := s.CreateSession(t.Context(), token, u.ID, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPassword(t.Context(), u.ID, "new"); err != nil {
+		t.Fatal(err)
+	}
+	if _, hash, err := s.UserByEmail(t.Context(), u.Email); err != nil || hash != "new" {
+		t.Fatalf("hash = %q, %v; want new", hash, err)
+	}
+	if _, err := s.SessionUser(t.Context(), token, time.Hour); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("session after password change: err = %v, want ErrNotFound", err)
+	}
+	if err := s.SetPassword(t.Context(), u.ID+1, "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown user: err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestLiveInviteIsAcceptedOnce(t *testing.T) {
 	s := migrated(t)
 	token := []byte("invite-hash")

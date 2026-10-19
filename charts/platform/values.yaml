@@ -5,3 +5,7 @@ gateway:
     host: gateway.127.0.0.1.nip.io
   # The local cluster serves plain HTTP, so a Secure cookie would never be sent back.
   secureCookies: false
+  # A fixed local sign-in for admin@mirage.local. Leave it empty anywhere reachable from
+  # outside this machine: the chart then generates one into the <release>-gateway Secret.
+  admin:
+    password: mirage-local-admin

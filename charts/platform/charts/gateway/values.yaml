@@ -28,7 +28,8 @@ secureCookies: true
 secretboxKey: ""
 
 # The first admin, created on first start. Empty password or apiKey keeps the existing one
-# or generates one; read them back from the <release>-gateway Secret.
+# or generates one; read them back from the <release>-gateway Secret. The admin's password
+# follows this Secret: change it and the next gateway start signs the admin in with the new one.
 admin:
   email: admin@mirage.local
   password: ""

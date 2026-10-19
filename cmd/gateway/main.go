@@ -16,7 +16,8 @@
 // GEMINI_API_KEY set, POST /api/chat runs a Gemini agent (GEMINI_MODEL) whose tool calls go
 // through this gateway's own /mcp as the logged-in user.
 //
-// Seeding only creates what is missing, so operators' later changes survive restarts.
+// Seeding only creates what is missing, so operators' later changes survive restarts. The one
+// exception is the seeded admin's password, which always follows SEED_ADMIN_PASSWORD.
 package main
 
 import (
@@ -218,9 +219,31 @@ func seedAdmin(ctx context.Context, st *store.Store) error {
 	if err != nil {
 		return fmt.Errorf("seeding admin: %w", err)
 	}
+	if !userCreated {
+		if err := syncAdminPassword(ctx, st, email, password, string(passwordHash)); err != nil {
+			return err
+		}
+	}
 	if userCreated || keyCreated {
 		slog.Info("seeded admin", "email", email, "user_created", userCreated, "key_created", keyCreated, "key_id", keyID)
 	}
+	return nil
+}
+
+// syncAdminPassword makes an existing seeded admin's password match SEED_ADMIN_PASSWORD, so
+// the Secret stays the one place that password is set.
+func syncAdminPassword(ctx context.Context, st *store.Store, email, password, passwordHash string) error {
+	admin, current, err := st.UserByEmail(ctx, email)
+	if err != nil {
+		return fmt.Errorf("seeding admin: %w", err)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(current), []byte(password)) == nil {
+		return nil
+	}
+	if err := st.SetPassword(ctx, admin.ID, passwordHash); err != nil {
+		return fmt.Errorf("seeding admin password: %w", err)
+	}
+	slog.Info("reset admin password to SEED_ADMIN_PASSWORD", "email", email)
 	return nil
 }
 

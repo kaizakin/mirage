@@ -82,6 +82,24 @@ func (s *Store) SetRole(ctx context.Context, userID int64, role string) error {
 	return affected(res, classify(err))
 }
 
+// SetPassword replaces a user's password hash and ends their sessions, so a browser signed
+// in with the old password has to sign in again.
+func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, userID, passwordHash)
+	if err := affected(res, err); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // DeleteUser removes a user with their sessions and API keys; their audit rows remain.
 func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
