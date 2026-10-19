@@ -2,21 +2,31 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { streamChat } from "../api/chat";
 import { errorMessage, isStatus } from "../api/client";
+import { Icon } from "../components/Icon";
+import { Alert } from "../components/States";
 import { setSession } from "../session";
 import { applyEvent, history, pendingTurn, type AssistantTurn, type ToolStep, type Turn } from "./chatModel";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+const suggestions = [
+  "List the five newest products",
+  "Show orders that are still processing",
+  "What is 100 USD in INR?",
+  "Which tools can you use right now?",
+];
 
 function StepCard({ step }: { step: ToolStep }) {
   const status = step.result === null ? "running" : step.result.isError ? "error" : "ok";
   return (
     <details className={`step step-${status}`}>
       <summary>
-        {status === "running" && <span className="spinner" aria-hidden="true" />}
-        <span>
-          {status === "running" ? "calling" : "called"} <code>{step.name}</code>
-          {status !== "running" && <span className="step-outcome"> → {status}</span>}
+        {status === "running" ? <span className="spinner" aria-hidden="true" /> : <Icon name="tool" size={14} />}
+        <span className="step-label">
+          {status === "running" ? "Calling" : "Called"} <code>{step.name}</code>
         </span>
+        {status !== "running" && <span className="step-outcome">{status}</span>}
+        <Icon name="chevron" size={14} />
       </summary>
       <div className="step-body">
         <h4>Arguments</h4>
@@ -31,31 +41,32 @@ function StepCard({ step }: { step: ToolStep }) {
 function AssistantMessage({ turn }: { turn: AssistantTurn }) {
   return (
     <div className="message message-assistant">
-      {turn.steps.length > 0 && (
-        <div className="steps">
-          {turn.steps.map((step) => (
-            <StepCard key={step.id} step={step} />
-          ))}
-        </div>
-      )}
-      {turn.answer !== null && (
-        // The model answers in Markdown (tables for lists). react-markdown renders no raw HTML,
-        // so model output cannot inject markup.
-        <div className="bubble markdown">
-          <Markdown remarkPlugins={[remarkGfm]}>{turn.answer}</Markdown>
-        </div>
-      )}
-      {turn.error !== null && (
-        <p className="alert alert-error" role="alert">
-          {turn.error}
-        </p>
-      )}
-      {turn.streaming && turn.answer === null && turn.steps.every((step) => step.result !== null) && (
-        <p className="muted thinking">
-          <span className="spinner" aria-hidden="true" />
-          Thinking…
-        </p>
-      )}
+      <span className="message-avatar" aria-hidden="true">
+        <Icon name="sparkle" size={14} />
+      </span>
+      <div className="message-body">
+        {turn.steps.length > 0 && (
+          <div className="steps">
+            {turn.steps.map((step) => (
+              <StepCard key={step.id} step={step} />
+            ))}
+          </div>
+        )}
+        {turn.answer !== null && (
+          // The model answers in Markdown (tables for lists). react-markdown renders no raw HTML,
+          // so model output cannot inject markup.
+          <div className="bubble markdown">
+            <Markdown remarkPlugins={[remarkGfm]}>{turn.answer}</Markdown>
+          </div>
+        )}
+        {turn.error !== null && <Alert>{turn.error}</Alert>}
+        {turn.streaming && turn.answer === null && turn.steps.every((step) => step.result !== null) && (
+          <p className="muted thinking">
+            <span className="spinner" aria-hidden="true" />
+            Thinking…
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -133,13 +144,38 @@ export function ChatPage() {
           <p className="muted">Ask the assistant to use the gateway's tools on your behalf. Calls are audited as you.</p>
         </div>
         {turns.length > 0 && (
-          <button type="button" className="button button-quiet" disabled={streaming} onClick={() => { setTurns([]); }}>
+          <button type="button" className="button" disabled={streaming} onClick={() => { setTurns([]); }}>
+            <Icon name="plus" />
             New conversation
           </button>
         )}
       </div>
       <div className="conversation" role="log" aria-live="polite" aria-busy={streaming}>
-        {turns.length === 0 && <p className="muted empty-state">Try "list the five newest products".</p>}
+        {turns.length === 0 && (
+          <div className="chat-empty">
+            <span className="empty-icon">
+              <Icon name="sparkle" size={20} />
+            </span>
+            <h2>What should the gateway do?</h2>
+            <p className="muted">The assistant picks tools from the servers you can reach. Try one of these:</p>
+            <ul className="suggestions">
+              {suggestions.map((prompt) => (
+                <li key={prompt}>
+                  <button
+                    type="button"
+                    className="suggestion"
+                    onClick={() => {
+                      setInput(prompt);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {turns.map((turn, index) =>
           turn.role === "user" ? (
             <div key={index} className="message message-user">
@@ -164,7 +200,7 @@ export function ChatPage() {
         <textarea
           id="chat-input"
           ref={inputRef}
-          rows={2}
+          rows={1}
           placeholder={streaming ? "Waiting for the answer…" : "Message the assistant. Enter sends, Shift+Enter adds a line."}
           disabled={streaming}
           value={input}
@@ -172,12 +208,14 @@ export function ChatPage() {
           onKeyDown={onKeyDown}
         />
         {streaming ? (
-          <button type="button" className="button" onClick={() => abort.current?.abort()}>
+          <button type="button" className="button composer-button" onClick={() => abort.current?.abort()}>
+            <Icon name="stop" />
             Stop
           </button>
         ) : (
-          <button type="submit" className="button button-primary" disabled={!input.trim()}>
+          <button type="submit" className="button button-primary composer-button" disabled={!input.trim()}>
             Send
+            <Icon name="send" />
           </button>
         )}
       </form>
