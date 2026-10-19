@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-// Money amounts stay decimal strings, as WooCommerce sends them, so no precision is lost to float64.
-
+// Product is a WooCommerce product. Money fields are decimal strings, as WooCommerce sends
+// them, so no precision is lost to float64.
 type Product struct {
 	ID           int    `json:"id"`
 	Name         string `json:"name"`
@@ -20,6 +20,7 @@ type Product struct {
 	DateCreated  Time   `json:"date_created_gmt"`
 }
 
+// NewProduct is the request body for CreateProduct. RegularPrice is a decimal string.
 type NewProduct struct {
 	Name         string `json:"name"`
 	RegularPrice string `json:"regular_price"`
@@ -27,10 +28,12 @@ type NewProduct struct {
 	Description  string `json:"description,omitempty"`
 }
 
+// ListProducts returns every product in the store, walking all pages.
 func (c *Client) ListProducts(ctx context.Context) ([]Product, error) {
 	return listAll[Product](ctx, c, "/products", nil)
 }
 
+// CreateProduct creates a product and returns it as the store saved it.
 func (c *Client) CreateProduct(ctx context.Context, p NewProduct) (*Product, error) {
 	var out Product
 	if _, err := c.do(ctx, http.MethodPost, apiPrefix+"/products", nil, p, &out); err != nil {
