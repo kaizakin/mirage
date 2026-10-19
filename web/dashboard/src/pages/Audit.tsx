@@ -1,9 +1,10 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useState, type SubmitEvent } from "react";
+import { Fragment, useState, type SubmitEvent } from "react";
 import { api } from "../api/endpoints";
 import { oneOf, outcomes, type AuditFilter, type Outcome } from "../api/types";
 import { Badge, type Tone } from "../components/Badge";
-import { ErrorNotice, Loading } from "../components/States";
+import { Icon } from "../components/Icon";
+import { EmptyState, ErrorNotice, Loading } from "../components/States";
 import { formatDuration, formatTimestamp } from "../format";
 
 const outcomeTone: Record<Outcome, Tone> = {
@@ -97,7 +98,8 @@ export function AuditPage() {
           <h1 id="audit-title">Audit log</h1>
           <p className="muted">Every tool call through the gateway, newest first.</p>
         </div>
-        <button type="button" className="button button-quiet" disabled={audit.isFetching} onClick={() => void audit.refetch()}>
+        <button type="button" className="button" disabled={audit.isFetching} onClick={() => void audit.refetch()}>
+          <Icon name="refresh" />
           Refresh
         </button>
       </div>
@@ -107,17 +109,17 @@ export function AuditPage() {
       ) : audit.isError ? (
         <ErrorNotice error={audit.error} />
       ) : entries.length === 0 ? (
-        <p className="empty-state muted">No calls match.</p>
+        <EmptyState icon="audit" title="No calls match">
+          Tool calls through the gateway appear here as they happen.
+        </EmptyState>
       ) : (
         <>
           <div className="table-wrap">
-            <table>
+            <table className="audit-table">
               <thead>
                 <tr>
                   <th scope="col">Time</th>
-                  <th scope="col">User</th>
-                  <th scope="col">Server</th>
-                  <th scope="col">Tool</th>
+                  <th scope="col">Call</th>
                   <th scope="col">Outcome</th>
                   <th scope="col" className="numeric">
                     Duration
@@ -126,17 +128,33 @@ export function AuditPage() {
               </thead>
               <tbody>
                 {entries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="nowrap">{formatTimestamp(entry.started_at)}</td>
-                    <td>{entry.user_email}</td>
-                    <td className="mono">{entry.server}</td>
-                    <td className="mono">{entry.tool}</td>
-                    <td>
-                      <Badge tone={outcomeTone[entry.outcome]}>{entry.outcome}</Badge>
-                      {entry.error && <div className="reason">{entry.error}</div>}
-                    </td>
-                    <td className="numeric nowrap">{formatDuration(entry.duration_ms)}</td>
-                  </tr>
+                  <Fragment key={entry.id}>
+                    <tr className={entry.error ? "has-detail" : undefined}>
+                      <td className="date muted">{formatTimestamp(entry.started_at)}</td>
+                      <td className="call">
+                        <span className="mono call-name">
+                          {entry.server}
+                          <span className="muted">__</span>
+                          {entry.tool}
+                        </span>
+                        <span className="muted small call-user">{entry.user_email}</span>
+                      </td>
+                      <td className="outcome">
+                        <Badge tone={outcomeTone[entry.outcome]}>{entry.outcome}</Badge>
+                      </td>
+                      <td className="numeric nowrap duration">{formatDuration(entry.duration_ms)}</td>
+                    </tr>
+                    {entry.error && (
+                      <tr className="detail-row">
+                        <td colSpan={4}>
+                          <p className="reason" title={entry.error}>
+                            <Icon name="alert" size={14} />
+                            <span>{entry.error}</span>
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
