@@ -84,6 +84,8 @@ spec:
               wp plugin is-installed woocommerce || wp plugin install woocommerce
               wp plugin is-active woocommerce || wp plugin activate woocommerce
               wp rewrite structure '/%postname%/'
+              wp option update show_on_front page
+              wp option update page_on_front "$(wp option get woocommerce_shop_page_id)"
               wp wc payment_gateway update cod --enabled=true --user="$ADMIN_USER"
               if [ -z "$(wp post list --post_type=product --name=seed-mug --post_status=any --format=ids)" ]; then
                 wp wc product create --name="Seed Mug" --slug=seed-mug --regular_price=299 --user="$ADMIN_USER"
