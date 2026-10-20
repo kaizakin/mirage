@@ -57,8 +57,11 @@ audit_since() { # audit_since <jar> <id>: audit rows newer than id, as JSON line
   api "$1" GET "/api/audit?limit=200" | jq -c --argjson after "$2" '.entries[] | select(.id > $after)'
 }
 
+product_created=no
+
 cleanup() {
   [[ -n $b_id ]] && api "$work/a" DELETE "/api/members/$b_id" >/dev/null 2>&1 || true
+  [[ $product_created == yes ]] && "$here/trash-product.sh" "$product_name" || true
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -93,6 +96,7 @@ pass "Claude Code (B) lists woo, currency, and deepwiki tools"
 step "A creates a product through the chat; it appears on the storefront"
 events=$(chat "$work/a" "Create a product named \"$product_name\" priced 349.")
 grep -q '"name":"woo__create_product"' <<<"$events" || fail "chat did not call woo__create_product: $events"
+product_created=yes
 grep -q '"event":"answer"' <<<"$events" || fail "chat gave no answer: $events"
 slug=$(tr '[:upper:] ' '[:lower:]-' <<<"$product_name")
 storefront=no
