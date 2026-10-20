@@ -9,6 +9,8 @@
  *   - Applies the active theme's style variation, if one is named.
  *   - Publishes home.html as the front page, with its placeholders filled in.
  *   - Moves WordPress's sample page and post to the trash.
+ *   - Sets the store's location and checkout rules, and marks WooCommerce's setup wizard
+ *     done, since this script is what sets the store up.
  *
  * Usage: wp eval-file storefront.php <directory> [style variation]
  */
@@ -143,3 +145,27 @@ foreach ( [ [ 'sample-page', 'page' ], [ 'hello-world', 'post' ] ] as [ $slug, $
 		WP_CLI::log( "trashed the sample $type $slug" );
 	}
 }
+
+// Store settings. Customers need an account to check out, so they can sign in later and follow
+// their orders under My account; they can create one at checkout or on My account. They choose
+// their own password, because the generated one would arrive by email and this cluster sends none.
+$settings = [
+	'woocommerce_default_country'                       => 'IN:KA',
+	'woocommerce_store_address'                         => '12 Church Street',
+	'woocommerce_store_city'                            => 'Bengaluru',
+	'woocommerce_store_postcode'                        => '560001',
+	'timezone_string'                                   => 'Asia/Kolkata',
+	'woocommerce_enable_guest_checkout'                 => 'no',
+	'woocommerce_enable_checkout_login_reminder'        => 'yes',
+	'woocommerce_enable_signup_and_login_from_checkout' => 'yes',
+	'woocommerce_enable_myaccount_registration'         => 'yes',
+	'woocommerce_registration_generate_username'        => 'yes',
+	'woocommerce_registration_generate_password'        => 'no',
+	// The setup wizard and its task list ask for what the settings above already hold.
+	'woocommerce_onboarding_profile'                    => [ 'completed' => true ],
+	'woocommerce_task_list_hidden_lists'                => [ 'setup', 'extended' ],
+];
+foreach ( $settings as $name => $value ) {
+	update_option( $name, $value );
+}
+WP_CLI::log( 'applied ' . count( $settings ) . ' store settings' );
