@@ -94,6 +94,8 @@ check "member cannot revoke the admin's key" 404 "$(api "$work/member" DELETE "/
 check "member revokes their own key" 204 "$(api "$work/member" DELETE "/api/keys/$member_key_id")"
 check "member's audit view is only their own" 0 \
   "$(api "$work/member" GET /api/audit >/dev/null; jq '[.entries[] | select(.user_email != "member-check@example.com")] | length' "$work/last")"
+check "member's audit filter options name no one else" 0 \
+  "$(api "$work/member" GET /api/audit/options >/dev/null; jq '[.users[] | select(.email != "member-check@example.com")] | length' "$work/last")"
 old_session=$(awk '$6 == "mirage_session" {print $7}' "$work/member")
 check "member logs out" 204 "$(api "$work/member" POST /api/logout)"
 # Replayed by hand: the jar dropped the cookie, so this proves the server ended the session.

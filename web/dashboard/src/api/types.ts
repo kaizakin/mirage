@@ -98,6 +98,13 @@ export interface AuditFilter {
   server: string;
   tool: string;
   outcome: Outcome | "";
+  // 0 means every user; the API ignores it for members, who only ever see their own calls.
+  userId: number;
+}
+
+export interface AuditOptions {
+  servers: { slug: string; tools: string[] }[];
+  users: { id: number; email: string }[];
 }
 
 export interface ChatMessage {

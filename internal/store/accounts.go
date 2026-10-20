@@ -274,6 +274,70 @@ type AuditFilter struct {
 	Limit   int
 }
 
+// AuditOptions lists what the audit log can be filtered by: every server with the tools it
+// was called with, and every user who made a call. userID scopes both to one user's calls;
+// 0 means everyone's. Deleted servers still appear, since their rows remain.
+type AuditOptions struct {
+	Servers []AuditServer
+	Users   []AuditUser
+}
+
+// AuditServer is a server slug and the tools called on it, sorted.
+type AuditServer struct {
+	Slug  string
+	Tools []string
+}
+
+// AuditUser is a user who appears in the audit log.
+type AuditUser struct {
+	ID    int64
+	Email string
+}
+
+// AuditOptions returns the values the audit log holds for its filters.
+func (s *Store) AuditOptions(ctx context.Context, userID int64) (AuditOptions, error) {
+	var out AuditOptions
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT server_slug, tool FROM audit_log
+		WHERE ($1 = 0 OR user_id = $1)
+		GROUP BY server_slug, tool ORDER BY server_slug, tool`, userID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slug, tool string
+		if err := rows.Scan(&slug, &tool); err != nil {
+			return out, err
+		}
+		if n := len(out.Servers); n == 0 || out.Servers[n-1].Slug != slug {
+			out.Servers = append(out.Servers, AuditServer{Slug: slug})
+		}
+		last := &out.Servers[len(out.Servers)-1]
+		last.Tools = append(last.Tools, tool)
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	rows, err = s.db.QueryContext(ctx, `
+		SELECT u.id, u.email FROM users u
+		WHERE EXISTS (SELECT 1 FROM audit_log a WHERE a.user_id = u.id) AND ($1 = 0 OR u.id = $1)
+		ORDER BY lower(u.email)`, userID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u AuditUser
+		if err := rows.Scan(&u.ID, &u.Email); err != nil {
+			return out, err
+		}
+		out.Users = append(out.Users, u)
+	}
+	return out, rows.Err()
+}
+
 // AuditRow is one recorded tool call.
 type AuditRow struct {
 	ID         int64

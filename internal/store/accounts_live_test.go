@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -154,5 +155,41 @@ func TestLiveKeysAndAuditRespectOwnership(t *testing.T) {
 	}
 	if timeouts, _ := s.Audit(t.Context(), AuditFilter{Outcome: "timeout", Limit: 10}); len(timeouts) != 1 {
 		t.Fatalf("timeouts = %+v", timeouts)
+	}
+}
+
+func TestLiveAuditOptionsGroupToolsAndRespectScope(t *testing.T) {
+	s := migrated(t)
+	ada, _ := s.CreateUser(t.Context(), "ada@example.com", "h", "admin")
+	bob, _ := s.CreateUser(t.Context(), "Bob@example.com", "h", "member")
+	_, _ = s.CreateUser(t.Context(), "idle@example.com", "h", "member")
+	for _, e := range []audit.Entry{
+		{UserID: ada.ID, ServerSlug: "woo", Tool: "list_orders", StartedAt: time.Now(), Outcome: audit.OK},
+		{UserID: ada.ID, ServerSlug: "woo", Tool: "list_orders", StartedAt: time.Now(), Outcome: audit.OK},
+		{UserID: bob.ID, ServerSlug: "woo", Tool: "get_order", StartedAt: time.Now(), Outcome: audit.OK},
+		{UserID: bob.ID, ServerSlug: "currency", Tool: "convert", StartedAt: time.Now(), Outcome: audit.OK},
+	} {
+		if err := s.RecordCall(t.Context(), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all, err := s.AuditOptions(t.Context(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantServers := []AuditServer{{Slug: "currency", Tools: []string{"convert"}}, {Slug: "woo", Tools: []string{"get_order", "list_orders"}}}
+	wantUsers := []AuditUser{{ID: ada.ID, Email: "ada@example.com"}, {ID: bob.ID, Email: "Bob@example.com"}}
+	if !reflect.DeepEqual(all.Servers, wantServers) || !reflect.DeepEqual(all.Users, wantUsers) {
+		t.Fatalf("everyone's options = %+v", all)
+	}
+
+	bobs, err := s.AuditOptions(t.Context(), bob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantServers = []AuditServer{{Slug: "currency", Tools: []string{"convert"}}, {Slug: "woo", Tools: []string{"get_order"}}}
+	if !reflect.DeepEqual(bobs.Servers, wantServers) || !reflect.DeepEqual(bobs.Users, []AuditUser{{ID: bob.ID, Email: "Bob@example.com"}}) {
+		t.Fatalf("bob's options = %+v; they must not show ada's calls", bobs)
 	}
 }

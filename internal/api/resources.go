@@ -355,6 +355,44 @@ type auditJSON struct {
 
 // listAudit pages the audit log newest first. Members see only their own calls; admins see
 // everyone's and may filter by user_id. next_before is the cursor for the following page.
+type auditOptionsJSON struct {
+	Servers []auditServerJSON `json:"servers"`
+	Users   []auditUserJSON   `json:"users"`
+}
+
+type auditServerJSON struct {
+	Slug  string   `json:"slug"`
+	Tools []string `json:"tools"`
+}
+
+type auditUserJSON struct {
+	ID    int64  `json:"id"`
+	Email string `json:"email"`
+}
+
+// auditOptions lists the servers, tools, and users the caller's audit view can be filtered
+// by. A member's options come from their own calls only.
+func (a *API) auditOptions(w http.ResponseWriter, r *http.Request) {
+	u, _ := UserFromContext(r.Context())
+	scope := u.ID
+	if u.Role == roleAdmin {
+		scope = 0
+	}
+	opts, err := a.Store.AuditOptions(r.Context(), scope)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	out := auditOptionsJSON{Servers: make([]auditServerJSON, 0, len(opts.Servers)), Users: make([]auditUserJSON, 0, len(opts.Users))}
+	for _, s := range opts.Servers {
+		out.Servers = append(out.Servers, auditServerJSON{Slug: s.Slug, Tools: s.Tools})
+	}
+	for _, user := range opts.Users {
+		out.Users = append(out.Users, auditUserJSON{ID: user.ID, Email: user.Email})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (a *API) listAudit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := store.AuditFilter{Server: q.Get("server"), Tool: q.Get("tool"), Outcome: q.Get("outcome"), Limit: 50}

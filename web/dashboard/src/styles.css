@@ -1117,18 +1117,55 @@ td.actions-cell .alert {
   margin-top: 0;
 }
 
-.call {
-  min-width: 0;
+.filters select {
+  width: 100%;
 }
 
-.call-name {
-  display: block;
+.filters .clear-filters {
+  align-self: flex-end;
+}
+
+.audit-table .day-row th {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-align: left;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-table tbody tr.day-row:hover th {
+  background: var(--bg);
+}
+
+.audit-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.audit-user {
+  max-width: 16rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audit-tool {
   font-weight: 500;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
-.call-user {
-  display: block;
+.server-chip {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 tr.has-detail td {
@@ -1160,7 +1197,7 @@ tbody tr.detail-row:hover td {
   }
 }
 
-@container (width < 480px) {
+@container (width < 680px) {
   .audit-table thead {
     position: absolute;
     width: 1px;
@@ -1173,11 +1210,21 @@ tbody tr.detail-row:hover td {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "call outcome"
-      "date duration";
+      "tool outcome"
+      "server duration"
+      "user time";
     gap: 2px var(--space-3);
     padding: var(--space-3);
     border-bottom: 1px solid var(--border);
+  }
+
+  .audit-table tr.day-row {
+    display: block;
+    padding: 0;
+  }
+
+  .audit-table tr.day-row th {
+    display: block;
   }
 
   .audit-table tr.has-detail {
@@ -1190,29 +1237,38 @@ tbody tr.detail-row:hover td {
     padding-top: 0;
   }
 
-  .audit-table tbody tr:last-child {
-    border-bottom: none;
-  }
-
   .audit-table td {
     padding: 0;
     border: none;
   }
 
-  .audit-table .call {
-    grid-area: call;
+  .audit-table .audit-tool {
+    grid-area: tool;
   }
 
-  .audit-table .outcome {
+  .audit-table .audit-server {
+    grid-area: server;
+  }
+
+  .audit-table .audit-user {
+    grid-area: user;
+    max-width: none;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .audit-table .audit-outcome {
     grid-area: outcome;
     text-align: right;
   }
 
-  .audit-table .date {
-    grid-area: date;
+  .audit-table .audit-time {
+    grid-area: time;
+    text-align: right;
+    font-size: 0.82rem;
   }
 
-  .audit-table .duration {
+  .audit-table .audit-duration {
     grid-area: duration;
     color: var(--muted);
     font-size: 0.82rem;

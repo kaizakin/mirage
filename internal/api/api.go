@@ -81,6 +81,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/keys", user(a.createKey))
 	mux.Handle("DELETE /api/keys/{id}", user(a.revokeKey))
 	mux.Handle("GET /api/audit", user(a.listAudit))
+	mux.Handle("GET /api/audit/options", user(a.auditOptions))
 	if a.Chat != nil {
 		mux.Handle("POST /api/chat", a.requireUser(a.Chat))
 	}
