@@ -50,6 +50,14 @@ spec:
               value: {{ .Values.setup.siteUrl | quote }}
             - name: STORE_CURRENCY
               value: {{ .Values.setup.currency | quote }}
+            - name: STORE_TITLE
+              value: {{ .Values.setup.title | quote }}
+            - name: STORE_TAGLINE
+              value: {{ .Values.setup.tagline | quote }}
+            - name: STORE_THEME
+              value: {{ .Values.setup.theme | quote }}
+            - name: STORE_THEME_STYLE
+              value: {{ .Values.setup.themeStyle | quote }}
             - name: ADMIN_USER
               value: {{ .Values.setup.adminUser | quote }}
             - name: CREDENTIALS_SECRET
@@ -75,6 +83,9 @@ spec:
               readOnly: true
             - name: scripts
               mountPath: /scripts
+              readOnly: true
+            - name: catalog
+              mountPath: /catalog
               readOnly: true
           resources:
             requests:
@@ -127,6 +138,9 @@ spec:
         - name: scripts
           configMap:
             name: {{ $fullname }}-setup-scripts
+        - name: catalog
+          configMap:
+            name: {{ $fullname }}-catalog
         - name: existing-credentials
           secret:
             secretName: {{ .Values.setup.credentialsSecret }}

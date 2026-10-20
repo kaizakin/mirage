@@ -1,0 +1,22 @@
+{{- if .Values.wordpress.persistence.enabled }}
+# The demo storefront: the catalog table, the home page, the script that applies them, and
+# the images (one per product plus the home page's banner), which travel as binaryData.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wordpress.fullname" . }}-catalog
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wordpress.labels" . | nindent 4 }}
+data:
+  catalog.tsv: |
+    {{- .Files.Get "files/catalog/catalog.tsv" | nindent 4 }}
+  home.html: |
+    {{- .Files.Get "files/catalog/home.html" | nindent 4 }}
+  storefront.php: |
+    {{- .Files.Get "files/catalog/storefront.php" | nindent 4 }}
+binaryData:
+  {{- range $path, $_ := .Files.Glob "files/catalog/*.jpg" }}
+  {{ base $path }}: {{ $.Files.Get $path | b64enc }}
+  {{- end }}
+{{- end }}

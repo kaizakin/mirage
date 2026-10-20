@@ -2,7 +2,8 @@
 # Installs WordPress + WooCommerce on the shared volume and, unless CREDENTIALS_SECRET already exists,
 # writes a fresh application password to /shared/pass. Safe to rerun on every install and upgrade.
 #
-# Env: SITE_URL, ADMIN_USER, ADMIN_PASS, CREDENTIALS_SECRET, STORE_CURRENCY, WORDPRESS_DB_* (read by wp-config.php).
+# Env: SITE_URL, ADMIN_USER, ADMIN_PASS, CREDENTIALS_SECRET, STORE_CURRENCY, STORE_TITLE, STORE_TAGLINE,
+# STORE_THEME, STORE_THEME_STYLE, WORDPRESS_DB_* (read by wp-config.php). The demo catalog is mounted at /catalog.
 set -eu
 
 until [ -f wp-config.php ]; do
@@ -31,6 +32,10 @@ fi
 # core install only sets the URL once; keep it in sync with values on every upgrade.
 wp option update home "$SITE_URL"
 wp option update siteurl "$SITE_URL"
+wp option update blogname "$STORE_TITLE"
+wp option update blogdescription "$STORE_TAGLINE"
+wp theme is-installed "$STORE_THEME" || wp theme install "$STORE_THEME"
+wp theme is-active "$STORE_THEME" || wp theme activate "$STORE_THEME"
 
 wp plugin is-installed woocommerce || wp plugin install woocommerce
 wp plugin is-active woocommerce || wp plugin activate woocommerce
@@ -38,12 +43,8 @@ wp rewrite structure '/%postname%/'
 wp option update woocommerce_currency "$STORE_CURRENCY"
 # New WooCommerce stores default to a "coming soon" page for logged-out visitors; publish the storefront.
 wp option update woocommerce_coming_soon no
-wp option update show_on_front page
-wp option update page_on_front "$(wp option get woocommerce_shop_page_id)"
 wp wc payment_gateway update cod --enabled=true --user="$ADMIN_USER"
-if [ -z "$(wp post list --post_type=product --name=seed-mug --post_status=any --format=ids)" ]; then
-  wp wc product create --name="Seed Mug" --slug=seed-mug --regular_price=299 --user="$ADMIN_USER"
-fi
+wp eval-file /catalog/storefront.php /catalog "$STORE_THEME_STYLE"
 
 if [ -s /existing/password ]; then
   echo "$CREDENTIALS_SECRET already exists; leaving the application password alone"

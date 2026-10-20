@@ -1,0 +1,13 @@
+# slug	name	price	category	image	description
+seed-mug	Seed Mug	299	Mugs	mug:#d9c9b0:#7a5c3e	A sturdy everyday stoneware mug in warm sand, glazed inside. Holds 300 ml.
+speckled-stoneware-mug	Speckled Stoneware Mug	449	Mugs	mug-speckled:#ece6dc:#3b3a36	Hand-thrown stoneware with an oatmeal glaze and dark iron speckles. Holds 350 ml.
+midnight-espresso-cup	Midnight Espresso Cup	349	Mugs	cup:#2f3640:#c8a97e	A matte black espresso cup and saucer with a burnished rim. Holds 90 ml.
+double-walled-glass-mug	Double-Walled Glass Mug	599	Mugs	glass-mug:#e9f1f2:#c26a1b	Borosilicate glass with an insulating double wall, so tea stays hot and fingers stay cool. Holds 300 ml.
+cast-iron-teapot	Cast Iron Teapot	2499	Teaware	iron-teapot:#2c2f33:#8a6f4d	A Japanese-style tetsubin with an enamelled interior and a stainless steel infuser. Holds 800 ml.
+glass-infuser-teapot	Glass Infuser Teapot	1299	Teaware	glass-teapot:#f3efe6:#b5651d	Heat-proof glass with a removable steel infuser, so you can watch the leaves unfurl. Holds 1 litre.
+bamboo-tea-tray	Bamboo Tea Tray	1799	Teaware	tray:#e8dcc4:#9c7a4a	A slatted bamboo gongfu tray with a hidden drip reservoir. 40 × 27 cm.
+assam-breakfast	Assam Breakfast Tea	399	Tea	tin:#7b2d26:#f2d6a2:ASSAM	A malty, full-bodied black tea from the Brahmaputra valley. Takes milk well. 100 g loose leaf.
+darjeeling-first-flush	Darjeeling First Flush	649	Tea	tin:#2f5d50:#f1e4c3:DARJEELING	Spring-picked leaves with a bright muscatel note. Best without milk. 50 g loose leaf.
+masala-chai-blend	Masala Chai Blend	349	Tea	pouch:#c0612b:#fbe7cf:CHAI	Strong CTC Assam with cardamom, ginger, cinnamon and clove. Simmer with milk. 100 g.
+kashmiri-kahwa	Kashmiri Kahwa	499	Tea	pouch:#8c6a2f:#f7ecd2:KAHWA	Green tea with saffron, cardamom, cinnamon and almond flakes. 50 g.
+tulsi-green-tea	Tulsi Green Tea	379	Tea	tin:#4f7942:#eef3e2:TULSI	Light green tea with holy basil and a hint of lemongrass. 100 g loose leaf.

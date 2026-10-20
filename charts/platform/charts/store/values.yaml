@@ -29,8 +29,15 @@ wordpress:
 setup:
   # Public URL WordPress builds links from; override per environment
   siteUrl: http://shop.127.0.0.1.nip.io
-  # ISO 4217 code the store prices in; the seeded mug's 299 is rupees.
+  # ISO 4217 code the store prices in; the catalog's prices (files/catalog/catalog.tsv) are rupees.
   currency: INR
+  title: Mirage Tea House
+  tagline: Loose-leaf tea and teaware, brewed in small batches
+  # A wordpress.org theme slug, installed and activated on every run. Extendable is a block
+  # theme with WooCommerce templates and style variations.
+  theme: extendable
+  # One of the theme's style variations (a file in its styles/ directory), or "" for its default.
+  themeStyle: butterscotch
   # Created on a fresh install; on an already-installed site it must name an existing administrator
   adminUser: admin
   adminPassword: "password"
