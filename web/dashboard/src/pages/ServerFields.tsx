@@ -1,5 +1,6 @@
 import { authTypes, oneOf, type AuthType } from "../api/types";
 import { slugPattern, type ServerDraft } from "./serverForm";
+import { PasswordInput } from "../components/PasswordInput";
 
 const authLabels: Record<AuthType, string> = {
   none: "None",
@@ -82,9 +83,8 @@ export function ServerFields({ idPrefix, draft, onChange, mode, hasCredential = 
       {draft.authType !== "none" && (
         <div className="field">
           <label htmlFor={id("credential")}>{mode === "edit" ? "New credential" : "Credential"}</label>
-          <input
+          <PasswordInput
             id={id("credential")}
-            type="password"
             autoComplete="new-password"
             required={mode === "create" || !hasCredential}
             aria-describedby={id("credential-hint")}

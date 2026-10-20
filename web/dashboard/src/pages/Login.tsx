@@ -6,6 +6,7 @@ import { api } from "../api/endpoints";
 import { BrandMark } from "../components/Icon";
 import { Alert, Loading } from "../components/States";
 import { setSession, useMe } from "../session";
+import { PasswordInput } from "../components/PasswordInput";
 
 function redirectTarget(state: unknown): string {
   if (typeof state === "object" && state !== null && "from" in state && typeof state.from === "string") {
@@ -60,9 +61,8 @@ export function LoginPage() {
         </div>
         <div className="field">
           <label htmlFor="login-password">Password</label>
-          <input
+          <PasswordInput
             id="login-password"
-            type="password"
             autoComplete="current-password"
             required
             value={password}

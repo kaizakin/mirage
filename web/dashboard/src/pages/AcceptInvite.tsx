@@ -6,6 +6,7 @@ import { api } from "../api/endpoints";
 import { BrandMark } from "../components/Icon";
 import { Alert } from "../components/States";
 import { setSession } from "../session";
+import { PasswordInput } from "../components/PasswordInput";
 
 const minLength = 12;
 
@@ -79,10 +80,9 @@ export function AcceptInvitePage() {
         </div>
         <div className="field">
           <label htmlFor="accept-password">Password</label>
-          <input
+          <PasswordInput
             ref={passwordField}
             id="accept-password"
-            type="password"
             autoComplete="new-password"
             required
             aria-invalid={problem !== null && password.length < minLength}
@@ -96,9 +96,8 @@ export function AcceptInvitePage() {
         </div>
         <div className="field">
           <label htmlFor="accept-confirm">Confirm password</label>
-          <input
+          <PasswordInput
             id="accept-confirm"
-            type="password"
             autoComplete="new-password"
             required
             aria-invalid={problem !== null && password.length >= minLength && password !== confirm}

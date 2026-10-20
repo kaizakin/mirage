@@ -1701,3 +1701,31 @@ tbody tr.detail-row:hover td {
     max-width: 100%;
   }
 }
+
+.password-input {
+  position: relative;
+  display: flex;
+}
+
+.password-input input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 2.5rem;
+}
+
+.password-toggle {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+}
