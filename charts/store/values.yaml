@@ -1,0 +1,44 @@
+# The provisioner sets everything store-specific (host, title, passwords, token); these are
+# the parts every store shares.
+
+# Where the gateway runs; only its pods may call this store's MCP server.
+gatewayNamespace: mirage
+
+# The namespace's ceiling. One store requests about 0.6 CPU and 1 GiB and is limited to about
+# 3.3 CPU and 2.2 GiB, so this leaves room for its setup Job to rerun.
+quota:
+  requests.cpu: "1"
+  requests.memory: 1536Mi
+  limits.cpu: "4"
+  limits.memory: 3Gi
+  requests.storage: 10Gi
+  persistentvolumeclaims: "3"
+  pods: "8"
+  services: "6"
+
+# Defaults for any container that declares no resources, and the most any one may ask for.
+limits:
+  default:
+    cpu: 250m
+    memory: 256Mi
+  defaultRequest:
+    cpu: 50m
+    memory: 64Mi
+  max:
+    cpu: "1"
+    memory: 1Gi
+  maxStorage: 5Gi
+
+shop:
+  setup:
+    hook: false
+    tagline: Loose-leaf tea and teaware, brewed in small batches
+  wordpress:
+    persistence:
+      size: 4Gi
+  mysql:
+    persistence:
+      size: 4Gi
+
+woo-mcp:
+  gatewayNamespace: mirage

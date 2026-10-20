@@ -20,3 +20,6 @@ resources:
   limits:
     cpu: 250m
     memory: 128Mi
+
+# The gateway's namespace when it differs from this release's; empty means the same one.
+gatewayNamespace: ""

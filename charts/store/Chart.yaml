@@ -1,0 +1,13 @@
+apiVersion: v2
+name: store
+description: One provisioned WooCommerce store, its MCP server, and the guardrails around them. The provisioner installs it once per store namespace.
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: shop
+    version: 0.1.0
+    repository: file://charts/shop
+  - name: woo-mcp
+    version: 0.1.0
+    repository: file://charts/woo-mcp

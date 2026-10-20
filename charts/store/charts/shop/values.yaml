@@ -27,6 +27,10 @@ wordpress:
 # post-install/post-upgrade Job that installs WordPress + WooCommerce and
 # publishes an application password to the woo-api-credentials Secret
 setup:
+  # true runs setup as a Helm hook after every install and upgrade, which then waits for it.
+  # false makes it an ordinary Job created with everything else, for a provisioner that
+  # installs without waiting and watches the Job finish.
+  hook: true
   # Public URL WordPress builds links from; override per environment
   siteUrl: http://shop.127.0.0.1.nip.io
   # ISO 4217 code the store prices in; the catalog's prices (files/catalog/catalog.tsv) are rupees.

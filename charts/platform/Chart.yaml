@@ -5,9 +5,11 @@ type: application
 version: 0.1.0
 
 dependencies:
-  - name: store
+  # The legacy single store, until it is retired; provisioned stores use charts/store.
+  - name: shop
+    alias: store
     version: 0.1.0
-    repository: file://charts/store
+    repository: file://charts/shop
   - name: woo-mcp
     version: 0.1.0
     repository: file://charts/woo-mcp

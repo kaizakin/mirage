@@ -17,6 +17,11 @@ spec:
         - podSelector:
             matchLabels:
               app: gateway
+          {{- with .Values.gatewayNamespace }}
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+          {{- end }}
       ports:
         - port: http
           protocol: TCP

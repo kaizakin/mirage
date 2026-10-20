@@ -8,9 +8,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
+  {{- if .Values.setup.hook }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- end }}
 spec:
   backoffLimit: 3
   activeDeadlineSeconds: 900
