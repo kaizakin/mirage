@@ -12,9 +12,16 @@ ingress:
   # The dashboard's host; its /api path routes here.
   dashboardHost: dash.127.0.0.1.nip.io
 
-# The chat agent's model. The key comes from a Secret you create (optional: without it,
-# chat answers 503):
+# The chat agent's model provider: groq or gemini. Each reads its key from a Secret you
+# create; without the chosen provider's key, chat answers 503.
+#   kubectl -n <ns> create secret generic <release>-groq --from-literal=api-key=...
 #   kubectl -n <ns> create secret generic <release>-gemini --from-literal=api-key=...
+llm:
+  provider: groq
+groq:
+  # Groq's free tier allowed 1,000 requests a day on this model (2026-10), against
+  # Gemini's 20, and it chains tool calls reliably.
+  model: openai/gpt-oss-120b
 gemini:
   # Measured on the free tier (2026-10-25): gemini-3.5-flash answered tool calls in ~2.5s;
   # gemini-3.8-flash took ~60s or returned 503 "high demand".

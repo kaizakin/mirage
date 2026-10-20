@@ -1,15 +1,13 @@
 package llm
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // Gemini calls the Gemini API's generateContent endpoint.
@@ -98,62 +96,14 @@ func (g *Gemini) Generate(ctx context.Context, req Request) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	// Gemini answers 429 and 503 when busy ("high demand"); those clear in seconds, so a
-	// short backoff beats failing the user's whole chat turn.
-	backoff := time.Second
-	for attempt := 1; ; attempt++ {
-		msg, retryable, err := g.generateOnce(ctx, payload)
-		if err == nil || !retryable || attempt == maxAttempts {
-			return msg, err
-		}
-		select {
-		case <-ctx.Done():
-			return Message{}, err
-		case <-time.After(backoff):
-		}
-		backoff *= 2
-	}
-}
-
-const maxAttempts = 3
-
-// generateOnce makes one request; retryable reports a transient server-side refusal.
-func (g *Gemini) generateOnce(ctx context.Context, payload []byte) (Message, bool, error) {
-	base := g.BaseURL
-	if base == "" {
-		base = "https://generativelanguage.googleapis.com"
-	}
-	endpoint := base + "/v1beta/models/" + url.PathEscape(g.Model) + ":generateContent"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return Message{}, false, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	base := cmp.Or(g.BaseURL, "https://generativelanguage.googleapis.com")
 	// The key travels in a header, never the URL, so it stays out of proxy and access logs.
-	httpReq.Header.Set("x-goog-api-key", g.APIKey)
-	client := g.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 90 * time.Second}
-	}
-	resp, err := client.Do(httpReq)
+	raw, err := postJSON(ctx, g.HTTP, "gemini", base+"/v1beta/models/"+url.PathEscape(g.Model)+":generateContent",
+		http.Header{"X-Goog-Api-Key": {g.APIKey}}, payload)
 	if err != nil {
-		return Message{}, false, fmt.Errorf("gemini: %w", err)
+		return Message{}, err
 	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return Message{}, false, fmt.Errorf("gemini: reading response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		var e struct {
-			Error struct{ Message string } `json:"error"`
-		}
-		_ = json.Unmarshal(raw, &e)
-		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable
-		return Message{}, retryable, fmt.Errorf("gemini: HTTP %d: %s", resp.StatusCode, firstNonEmpty(e.Error.Message, strings.TrimSpace(string(raw))))
-	}
-	msg, err := decodeGemini(raw)
-	return msg, false, err
+	return decodeGemini(raw)
 }
 
 func encodeGemini(m Message) (json.RawMessage, error) {
@@ -215,15 +165,6 @@ func decodeGemini(raw []byte) (Message, error) {
 		return Message{}, fmt.Errorf("gemini: empty reply (finish reason %s)", firstNonEmpty(cand.FinishReason, "unknown"))
 	}
 	return m, nil
-}
-
-func firstNonEmpty(s ...string) string {
-	for _, v := range s {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // geminiKeywords are the JSON Schema keywords Gemini's OpenAPI-subset Schema accepts with

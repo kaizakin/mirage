@@ -3,7 +3,8 @@
 # dashboard and its chat) and B (an invited member, through Claude Code with B's key).
 # Re-run it after every change; it exits non-zero on the first broken line.
 #
-# Needs the platform deployed with a Gemini key (the <release>-gemini Secret), plus claude,
+# Needs the platform deployed with a chat model key (the <release>-groq Secret, or
+# <release>-gemini with gateway.llm.provider=gemini), plus claude,
 # jq, and curl on PATH.
 #
 # Env: NAMESPACE, RELEASE_NAME; DASH_URL (default http://dash.127.0.0.1.nip.io),

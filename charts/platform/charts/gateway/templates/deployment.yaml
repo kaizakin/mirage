@@ -55,6 +55,16 @@ spec:
                 secretKeyRef:
                   name: {{ $fullname }}
                   key: secretbox-key
+            - name: LLM_PROVIDER
+              value: {{ .Values.llm.provider | quote }}
+            - name: GROQ_MODEL
+              value: {{ .Values.groq.model | quote }}
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-groq
+                  key: api-key
+                  optional: true
             - name: GEMINI_MODEL
               value: {{ .Values.gemini.model | quote }}
             - name: GEMINI_API_KEY

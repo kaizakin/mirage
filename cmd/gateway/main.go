@@ -12,9 +12,10 @@
 //     SEED_ADMIN_API_KEY, a gw_ key for them generated elsewhere.
 //
 // The dashboard API is served under /api. Its session cookie is Secure unless
-// INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. With
-// GEMINI_API_KEY set, POST /api/chat runs a Gemini agent (GEMINI_MODEL) whose tool calls go
-// through this gateway's own /mcp as the logged-in user.
+// INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. POST /api/chat
+// runs an agent whose tool calls go through this gateway's own /mcp as the logged-in user.
+// LLM_PROVIDER picks its model: groq (the default; GROQ_API_KEY, GROQ_MODEL) or gemini
+// (GEMINI_API_KEY, GEMINI_MODEL). Without the chosen provider's key, chat answers 503.
 //
 // Seeding only creates what is missing, so operators' later changes survive restarts. The one
 // exception is the seeded admin's password, which always follows SEED_ADMIN_PASSWORD.
@@ -267,19 +268,39 @@ func waitForDatabase(ctx context.Context, dsn string) (*sql.DB, error) {
 	}
 }
 
-// chatAgent returns the /api/chat handler, or a handler explaining that chat is off when no
-// Gemini key is configured. The agent reaches this process's /mcp over loopback.
+// chatAgent returns the /api/chat handler, or a handler explaining why chat is off. The
+// agent reaches this process's /mcp over loopback.
 func chatAgent(issuer *auth.TokenIssuer, listen string) http.Handler {
-	key := os.Getenv("GEMINI_API_KEY")
-	if key == "" {
+	provider, err := chatProvider(cmp.Or(os.Getenv("LLM_PROVIDER"), "groq"))
+	if err != nil {
+		slog.Warn("chat is off", "reason", err)
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "chat is not configured: the gateway has no GEMINI_API_KEY", http.StatusServiceUnavailable)
+			http.Error(w, "chat is not configured: "+err.Error(), http.StatusServiceUnavailable)
 		})
 	}
 	_, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		port = "8080"
 	}
-	provider := &llm.Gemini{APIKey: key, Model: cmp.Or(os.Getenv("GEMINI_MODEL"), "gemini-3.5-flash")}
 	return agent.New(provider, issuer, "http://127.0.0.1:"+port+"/mcp")
+}
+
+// chatProvider builds the named model provider from its key and model variables.
+func chatProvider(name string) (llm.Provider, error) {
+	switch name {
+	case "groq":
+		key := os.Getenv("GROQ_API_KEY")
+		if key == "" {
+			return nil, errors.New("LLM_PROVIDER is groq but GROQ_API_KEY is unset")
+		}
+		return &llm.Groq{APIKey: key, Model: cmp.Or(os.Getenv("GROQ_MODEL"), "openai/gpt-oss-120b")}, nil
+	case "gemini":
+		key := os.Getenv("GEMINI_API_KEY")
+		if key == "" {
+			return nil, errors.New("LLM_PROVIDER is gemini but GEMINI_API_KEY is unset")
+		}
+		return &llm.Gemini{APIKey: key, Model: cmp.Or(os.Getenv("GEMINI_MODEL"), "gemini-3.5-flash")}, nil
+	default:
+		return nil, fmt.Errorf("unknown LLM_PROVIDER %q; use groq or gemini", name)
+	}
 }
