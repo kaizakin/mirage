@@ -75,13 +75,17 @@ type ServerRow struct {
 	AuthHeader    string
 	HasCredential bool
 	CreatedAt     time.Time
+	// Shop is the slug of the provisioned store that owns this server, or "". The store's
+	// lifecycle manages such a server, not the dashboard's server controls.
+	Shop string
 }
 
 // Servers lists every server, enabled or not, ordered by slug.
 func (s *Store) Servers(ctx context.Context) ([]ServerRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT slug, url, enabled, auth_type, coalesce(auth_header, ''), credential_enc IS NOT NULL, created_at
-		FROM servers ORDER BY slug`)
+		SELECT s.slug, s.url, s.enabled, s.auth_type, coalesce(s.auth_header, ''), s.credential_enc IS NOT NULL, s.created_at,
+			coalesce(sh.slug, '')
+		FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id ORDER BY s.slug`)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +93,7 @@ func (s *Store) Servers(ctx context.Context) ([]ServerRow, error) {
 	var out []ServerRow
 	for rows.Next() {
 		var r ServerRow
-		if err := rows.Scan(&r.Slug, &r.URL, &r.Enabled, &r.AuthType, &r.AuthHeader, &r.HasCredential, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.Slug, &r.URL, &r.Enabled, &r.AuthType, &r.AuthHeader, &r.HasCredential, &r.CreatedAt, &r.Shop); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -140,6 +144,15 @@ func (s *Store) UpdateServer(ctx context.Context, box *secretbox.Box, slug strin
 		WHERE slug = $1`,
 		slug, p.URL, p.Enabled, p.AuthType, p.AuthHeader, credential)
 	return affected(res, classify(err))
+}
+
+// ServerShop returns the slug of the store that owns the server, "" for an ordinary
+// server, or ErrNotFound.
+func (s *Store) ServerShop(ctx context.Context, slug string) (string, error) {
+	var shop string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT coalesce(sh.slug, '') FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id WHERE s.slug = $1`, slug).Scan(&shop)
+	return shop, notFound(err)
 }
 
 // DeleteServer removes a server. Its audit rows remain.

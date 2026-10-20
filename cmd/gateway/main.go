@@ -14,6 +14,8 @@
 // The dashboard API is served under /api. Its session cookie is Secure unless
 // INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. POST /api/chat
 // runs an agent whose tool calls go through this gateway's own /mcp as the logged-in user.
+// Users create stores under /api/stores; STORE_DOMAIN (default shop.127.0.0.1.nip.io) is the
+// domain their hosts sit under, and MAX_STORES_PER_USER (default 3) caps each user's stores.
 // LLM_PROVIDER picks its model: groq (the default; GROQ_API_KEY, GROQ_MODEL) or gemini
 // (GEMINI_API_KEY, GEMINI_MODEL). Without the chosen provider's key, chat answers 503.
 //
@@ -32,6 +34,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -105,6 +108,11 @@ func run() error {
 	}
 	listen := cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080")
 
+	shops, err := shopOptions()
+	if err != nil {
+		return err
+	}
+
 	// A buffered slot: requests coalesce while a reload is pending.
 	reload := make(chan struct{}, 1)
 	dashboard := api.New(api.Options{
@@ -117,6 +125,7 @@ func run() error {
 			}
 		},
 		SecureCookie: os.Getenv("INSECURE_COOKIES") != "true",
+		Shops:        shops,
 	})
 
 	mux := http.NewServeMux()
@@ -266,6 +275,19 @@ func waitForDatabase(ctx context.Context, dsn string) (*sql.DB, error) {
 		}
 		wait = min(wait*2, 10*time.Second)
 	}
+}
+
+// shopOptions reads where provisioned stores are served and how many each user may have.
+func shopOptions() (api.ShopOptions, error) {
+	opts := api.ShopOptions{Domain: cmp.Or(os.Getenv("STORE_DOMAIN"), "shop.127.0.0.1.nip.io"), MaxPerUser: 3}
+	if v := os.Getenv("MAX_STORES_PER_USER"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return opts, fmt.Errorf("MAX_STORES_PER_USER must be a positive integer, got %q", v)
+		}
+		opts.MaxPerUser = n
+	}
+	return opts, nil
 }
 
 // chatAgent returns the /api/chat handler, or a handler explaining why chat is off. The

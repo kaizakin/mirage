@@ -50,7 +50,8 @@ type Options struct {
 	// SecureCookie sets the Secure attribute; off only for plain-HTTP local clusters.
 	SecureCookie bool
 	// Chat serves POST /api/chat for the logged-in user; nil leaves the route out.
-	Chat http.Handler
+	Chat  http.Handler
+	Shops ShopOptions
 }
 
 // API serves /api.
@@ -82,6 +83,9 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("DELETE /api/keys/{id}", user(a.revokeKey))
 	mux.Handle("GET /api/audit", user(a.listAudit))
 	mux.Handle("GET /api/audit/options", user(a.auditOptions))
+	mux.Handle("GET /api/stores", user(a.listShops))
+	mux.Handle("POST /api/stores", user(a.createShop))
+	mux.Handle("DELETE /api/stores/{slug}", user(a.deleteShop))
 	if a.Chat != nil {
 		mux.Handle("POST /api/chat", a.requireUser(a.Chat))
 	}

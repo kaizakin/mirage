@@ -32,6 +32,8 @@ type serverJSON struct {
 	Reason        string     `json:"reason,omitempty"`
 	Tools         []toolJSON `json:"tools"`
 	CreatedAt     time.Time  `json:"created_at"`
+	// Store is the slug of the provisioned store that owns this server, if any.
+	Store string `json:"store,omitempty"`
 }
 
 func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +49,8 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 	out := make([]serverJSON, 0, len(rows))
 	for _, row := range rows {
 		s := serverJSON{Slug: row.Slug, URL: row.URL, Enabled: row.Enabled, AuthType: row.AuthType,
-			AuthHeader: row.AuthHeader, HasCredential: row.HasCredential, CreatedAt: row.CreatedAt, Tools: []toolJSON{}}
+			AuthHeader: row.AuthHeader, HasCredential: row.HasCredential, CreatedAt: row.CreatedAt, Tools: []toolJSON{},
+			Store: row.Shop}
 		st, running := live[row.Slug]
 		switch {
 		case !row.Enabled:
@@ -124,6 +127,9 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
+	if a.managedServer(w, r, r.PathValue("slug")) {
+		return
+	}
 	var in serverInput
 	if !decode(w, r, &in) {
 		return
@@ -142,6 +148,9 @@ func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {
+	if a.managedServer(w, r, r.PathValue("slug")) {
+		return
+	}
 	if err := a.Store.DeleteServer(r.Context(), r.PathValue("slug")); err != nil {
 		storeError(w, r, err)
 		return
