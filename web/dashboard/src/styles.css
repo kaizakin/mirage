@@ -691,6 +691,15 @@ input[aria-invalid="true"]:focus {
   outline-offset: 2px;
 }
 
+.switch:has(input:disabled),
+.switch input:disabled {
+  cursor: not-allowed;
+}
+
+.switch input:disabled {
+  opacity: 0.5;
+}
+
 .toolbar {
   margin-bottom: var(--space-4);
 }
@@ -966,8 +975,10 @@ td.actions-cell .alert {
 }
 
 .store-preview {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-5);
+  margin: var(--space-3) 0 0;
   overflow-wrap: anywhere;
 }
 
