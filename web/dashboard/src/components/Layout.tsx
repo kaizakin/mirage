@@ -6,6 +6,7 @@ import { BrandMark, Icon, type IconName } from "./Icon";
 
 const pages: readonly { to: string; label: string; icon: IconName; adminOnly: boolean }[] = [
   { to: "/servers", label: "Servers", icon: "servers", adminOnly: true },
+  { to: "/stores", label: "Stores", icon: "store", adminOnly: false },
   { to: "/members", label: "Members", icon: "members", adminOnly: true },
   { to: "/keys", label: "API keys", icon: "key", adminOnly: false },
   { to: "/audit", label: "Audit log", icon: "audit", adminOnly: false },

@@ -942,6 +942,49 @@ td.actions-cell .alert {
   margin: 0;
 }
 
+.store-provisioning {
+  border-left: 3px solid var(--amber);
+}
+
+.store-failed {
+  border-left: 3px solid var(--red);
+}
+
+.store-deleting {
+  border-left: 3px solid var(--border-strong);
+  opacity: 0.75;
+}
+
+.store-meta {
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+}
+
+.server-url a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.store-preview {
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.store-submit {
+  margin-top: var(--space-4);
+  align-items: flex-start;
+}
+
+.badge .spinner {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-width: 1.5px;
+  border-color: transparent;
+  border-top-color: currentcolor;
+  border-right-color: currentcolor;
+}
+
 .inline-form {
   padding: var(--space-4);
   background: var(--surface-2);

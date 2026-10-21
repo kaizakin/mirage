@@ -10,9 +10,11 @@ import type {
   Invite,
   Member,
   NewServer,
+  NewStore,
   Role,
   Server,
   ServerPatch,
+  Store,
   User,
 } from "./types";
 
@@ -35,6 +37,10 @@ export const api = {
   createServer: (server: NewServer) => call("POST", "/api/servers", server),
   updateServer: (slug: string, patch: ServerPatch) => call("PATCH", `/api/servers/${seg(slug)}`, patch),
   deleteServer: (slug: string) => call("DELETE", `/api/servers/${seg(slug)}`),
+
+  stores: () => json<Store[]>("GET", "/api/stores"),
+  createStore: (store: NewStore) => json<Store>("POST", "/api/stores", store),
+  deleteStore: (slug: string) => call("DELETE", `/api/stores/${seg(slug)}`),
 
   members: () => json<Member[]>("GET", "/api/members"),
   setMemberRole: (id: number, role: Role) => call("PATCH", `/api/members/${id}`, { role }),

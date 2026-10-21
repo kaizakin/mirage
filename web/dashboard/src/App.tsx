@@ -9,6 +9,7 @@ import { KeysPage } from "./pages/Keys";
 import { LoginPage } from "./pages/Login";
 import { MembersPage } from "./pages/Members";
 import { ServersPage } from "./pages/Servers";
+import { StoresPage } from "./pages/Stores";
 import { UserContext, useCurrentUser, useMe } from "./session";
 
 function RequireUser({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ export function App() {
             </RequireAdmin>
           }
         />
+        <Route path="stores" element={<StoresPage />} />
         <Route path="keys" element={<KeysPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="chat" element={<ChatPage />} />

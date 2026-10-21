@@ -1,9 +1,10 @@
 export type Tone = "green" | "amber" | "red" | "grey";
 
-export function Badge({ tone, children }: { tone: Tone; children: string }) {
+/** busy swaps the dot for a spinner, for states that are still changing. */
+export function Badge({ tone, busy = false, children }: { tone: Tone; busy?: boolean; children: string }) {
   return (
     <span className={`badge badge-${tone}`}>
-      <span className="dot" aria-hidden="true" />
+      <span className={busy ? "spinner" : "dot"} aria-hidden="true" />
       {children}
     </span>
   );

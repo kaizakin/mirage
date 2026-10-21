@@ -26,6 +26,8 @@ export interface Server {
   reason?: string;
   tools: Tool[];
   created_at: string;
+  /** The slug of the store that owns this server; its lifecycle, not the admin, manages it. */
+  store?: string;
 }
 
 export interface NewServer {
@@ -42,6 +44,27 @@ export interface ServerPatch {
   auth_type?: AuthType;
   auth_header?: string;
   credential?: string;
+}
+
+export type StoreStatus = "provisioning" | "ready" | "failed" | "deleting";
+
+export interface Store {
+  slug: string;
+  name: string;
+  status: StoreStatus;
+  reason?: string;
+  url: string;
+  /** The store's MCP server slug, which prefixes its tools. */
+  server: string;
+  /** Empty when the owner's account was deleted. */
+  owner_email: string;
+  created_at: string;
+  ready_at?: string;
+}
+
+export interface NewStore {
+  name: string;
+  slug: string;
 }
 
 export interface Member extends User {
