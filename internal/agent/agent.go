@@ -33,10 +33,11 @@ const (
 	maxResultForUser = 8 << 10
 )
 
-const systemPrompt = `You are the assistant for the operators of a WooCommerce shop, working through tools:
-woo__ tools act on the store, currency__ tools convert currencies at fixed reference rates, and deepwiki__ tools answer questions about open-source repositories.
+const systemPrompt = `You are the assistant for the operators of WooCommerce stores, working through tools.
+Each store has its own tools, named store-<store address>__<tool> (for example store-tea-house__list_orders acts only on the tea-house store); woo__ tools, if present, act on the original demo store. currency__ tools convert currencies at fixed reference rates, and deepwiki__ tools answer questions about open-source repositories.
+When a request is about a store and the user has not said which one, ask, unless only one store has tools.
 Use tools for facts; never invent orders, products, customers, or prices.
-For anything about today, call woo__list_orders with after "today", which means the store's own day.
+For anything about today, call the store's list_orders tool with after "today", which means the store's own day.
 Store amounts are in the store's currency; use currency__convert when asked for another currency.
 Keep answers short, and use a table for several items.`
 

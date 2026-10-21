@@ -25,3 +25,6 @@ dependencies:
   - name: dashboard
     version: 0.1.0
     repository: file://charts/dashboard
+  - name: provisioner
+    version: 0.1.0
+    repository: file://charts/provisioner

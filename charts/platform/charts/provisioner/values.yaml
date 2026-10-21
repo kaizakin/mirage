@@ -1,0 +1,17 @@
+image:
+  repository: mirage/provisioner
+  tag: dev
+  pullPolicy: IfNotPresent
+# Image ID of the locally built image (make images sets it); a new value rolls the pod.
+imageId: ""
+
+# How long a store may take to become ready before it fails with the reason.
+timeout: 10m
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

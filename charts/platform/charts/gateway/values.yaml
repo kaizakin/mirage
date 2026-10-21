@@ -27,6 +27,12 @@ gemini:
   # gemini-3.8-flash took ~60s or returned 503 "high demand".
   model: gemini-3.5-flash
 
+# Provisioned stores: each is served at http://<slug>.<domain>, and a user may have at most
+# maxPerUser at once.
+stores:
+  domain: shop.127.0.0.1.nip.io
+  maxPerUser: 3
+
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true
 

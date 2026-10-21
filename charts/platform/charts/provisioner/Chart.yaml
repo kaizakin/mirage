@@ -1,0 +1,6 @@
+apiVersion: v2
+name: provisioner
+description: Turns the stores users ask for into Helm releases of the store chart, one namespace each
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

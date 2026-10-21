@@ -10,7 +10,7 @@ LIVE_PORT ?= 8081
 STORE_PORT ?= 15432
 # Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>;
 # the dashboard image builds from web/dashboard.
-SERVICES := woo-mcp currency-mcp gateway
+SERVICES := woo-mcp currency-mcp gateway provisioner
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT

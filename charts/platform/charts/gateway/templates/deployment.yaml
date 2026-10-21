@@ -73,6 +73,10 @@ spec:
                   name: {{ .Release.Name }}-gemini
                   key: api-key
                   optional: true
+            - name: STORE_DOMAIN
+              value: {{ .Values.stores.domain | quote }}
+            - name: MAX_STORES_PER_USER
+              value: {{ .Values.stores.maxPerUser | quote }}
             - name: INSECURE_COOKIES
               value: {{ (not .Values.secureCookies) | quote }}
             - name: SEED_ADMIN_EMAIL

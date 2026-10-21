@@ -11,12 +11,15 @@ spec:
       {{- include "postgres.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
-  # The gateway is the only client; its chart labels its pods app: gateway.
+  # The gateway and the provisioner are the only clients; their charts label their pods.
   ingress:
     - from:
         - podSelector:
             matchLabels:
               app: gateway
+        - podSelector:
+            matchLabels:
+              app: provisioner
       ports:
         - port: postgres
           protocol: TCP

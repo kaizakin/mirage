@@ -1,0 +1,87 @@
+{{- $fullname := include "provisioner.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  # One provisioner at a time: two would race on the same stores' Helm releases. Recreate
+  # stops the old pod before the new one starts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "provisioner.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "provisioner.selectorLabels" . | nindent 8 }}
+        # The label Postgres's NetworkPolicy admits.
+        app: provisioner
+      annotations:
+        mirage/image-id: {{ .Values.imageId | quote }}
+    spec:
+      serviceAccountName: {{ $fullname }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provisioner
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: password
+            # Kubernetes expands $(PGPASSWORD) from the variable above.
+            - name: DATABASE_URL
+              value: "postgres://mirage:$(PGPASSWORD)@{{ .Release.Name }}-postgres:5432/mirage?sslmode=disable"
+            # The gateway's key: the provisioner seals each store's secrets and its MCP
+            # server's credential, which the gateway opens.
+            - name: SECRETBOX_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-gateway
+                  key: secretbox-key
+            - name: GATEWAY_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: PROVISION_TIMEOUT
+              value: {{ .Values.timeout | quote }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            # Helm caches API discovery under HOME.
+            - name: home
+              mountPath: /home/nonroot
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: home
+          emptyDir: {}
