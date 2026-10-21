@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/endpoints";
 import type { Server, ServerStatus } from "../api/types";
 import { Badge, type Tone } from "../components/Badge";
@@ -133,6 +134,7 @@ function ServerCard({ server }: { server: Server }) {
   });
   const remove = useMutation({ mutationFn: () => api.deleteServer(server.slug), onSuccess: refresh });
   const error = toggle.error ?? remove.error;
+  const managedNote = server.store === undefined ? undefined : `${server.slug}-managed`;
 
   return (
     <li className={`server server-${server.status}`}>
@@ -140,38 +142,52 @@ function ServerCard({ server }: { server: Server }) {
         <div className="server-id">
           <h2 className="server-slug">{server.slug}</h2>
           <Badge tone={statusTone[server.status]}>{server.status}</Badge>
+          {server.store !== undefined && (
+            <Link to="/stores" className="server-chip">
+              Store: {server.store}
+            </Link>
+          )}
         </div>
         <div className="server-url mono truncate" title={server.url}>
           {server.url}
         </div>
         <div className="row-actions">
-          <label className="switch">
+          <label className="switch" title={server.store && `Managed by store ${server.store}`}>
             <input
               type="checkbox"
               role="switch"
               aria-label={`Enable ${server.slug}`}
+              aria-describedby={managedNote}
               checked={server.enabled}
-              disabled={toggle.isPending}
+              disabled={toggle.isPending || server.store !== undefined}
               onChange={(e) => { toggle.mutate(e.target.checked); }}
             />
             <span>{server.enabled ? "Enabled" : "Disabled"}</span>
           </label>
-          <button
-            type="button"
-            className="button button-quiet"
-            aria-expanded={editing}
-            aria-label={`Edit ${server.slug}`}
-            onClick={() => { setEditing((v) => !v); }}
-          >
-            Edit
-          </button>
-          <ConfirmButton
-            label="Delete"
-            subject={server.slug}
-            confirmLabel={`Delete ${server.slug}`}
-            busy={remove.isPending}
-            onConfirm={() => { remove.mutate(); }}
-          />
+          {server.store === undefined ? (
+            <>
+              <button
+                type="button"
+                className="button button-quiet"
+                aria-expanded={editing}
+                aria-label={`Edit ${server.slug}`}
+                onClick={() => { setEditing((v) => !v); }}
+              >
+                Edit
+              </button>
+              <ConfirmButton
+                label="Delete"
+                subject={server.slug}
+                confirmLabel={`Delete ${server.slug}`}
+                busy={remove.isPending}
+                onConfirm={() => { remove.mutate(); }}
+              />
+            </>
+          ) : (
+            <span id={managedNote} className="muted small">
+              Managed by store {server.store}
+            </span>
+          )}
         </div>
       </div>
       {server.reason && (
