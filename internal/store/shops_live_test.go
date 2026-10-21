@@ -95,6 +95,12 @@ func TestLiveShopReadinessAndTeardown(t *testing.T) {
 	if len(enabled) != 1 || enabled[0].Slug != "store-tea" {
 		t.Fatalf("enabled servers = %+v, want the store's", enabled)
 	}
+	if err := s.RegisterShopServer(t.Context(), box, shop.ID, srv); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.EnabledServers(t.Context()); string(again[0].CredentialEnc) != string(enabled[0].CredentialEnc) {
+		t.Fatal("registering again rewrote the server; the gateway would reconnect on every pass")
+	}
 	if err := s.CreateServer(t.Context(), box, ServerSeed{Slug: "store-other", URL: "http://x", AuthType: "none"}); err != nil {
 		t.Fatal(err)
 	}

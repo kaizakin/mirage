@@ -187,31 +187,39 @@ type ShopServer struct {
 	Credential string // a bearer token
 }
 
-// RegisterShopServer creates or refreshes the store's server row, so a ready store whose
-// registration went missing gets it back. A server with the same slug that the store does
-// not own is ErrConflict.
+// RegisterShopServer registers the store's server unless it already is, so a ready store
+// whose registration went missing gets it back. An existing registration is left exactly as
+// it is: rewriting it would reseal the credential, and the gateway reconnects to any server
+// whose stored configuration changes. A server with the same slug that the store does not
+// own is ErrConflict.
 func (s *Store) RegisterShopServer(ctx context.Context, box *secretbox.Box, shopID int64, srv ShopServer) error {
 	return registerShopServer(ctx, s.db, box, shopID, srv)
 }
 
-type execer interface {
+type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func registerShopServer(ctx context.Context, db execer, box *secretbox.Box, shopID int64, srv ShopServer) error {
+func registerShopServer(ctx context.Context, db querier, box *secretbox.Box, shopID int64, srv ShopServer) error {
 	credential, err := seal(box, srv.Slug, srv.Credential)
 	if err != nil {
 		return err
 	}
 	res, err := db.ExecContext(ctx, `
 		INSERT INTO servers (slug, url, auth_type, credential_enc, shop_id) VALUES ($1, $2, 'bearer', $3, $4)
-		ON CONFLICT (slug) DO UPDATE SET url = excluded.url, auth_type = 'bearer', auth_header = NULL,
-			credential_enc = excluded.credential_enc, enabled = true
-		WHERE servers.shop_id = excluded.shop_id`, srv.Slug, srv.URL, credential, shopID)
+		ON CONFLICT (slug) DO NOTHING`, srv.Slug, srv.URL, credential, shopID)
 	if err != nil {
 		return classify(err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if n, _ := res.RowsAffected(); n == 1 {
+		return nil
+	}
+	var owner sql.NullInt64
+	if err := db.QueryRowContext(ctx, `SELECT shop_id FROM servers WHERE slug = $1`, srv.Slug).Scan(&owner); err != nil {
+		return err
+	}
+	if owner.Int64 != shopID {
 		return fmt.Errorf("%w: server %s exists and does not belong to this store", ErrConflict, srv.Slug)
 	}
 	return nil

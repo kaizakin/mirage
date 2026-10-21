@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"time"
 
 	// Registers the "pgx" database/sql driver.
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -55,4 +56,24 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		slog.Info("applied migration", "version", r.Source.Version, "file", r.Source.Path, "took", r.Duration)
 	}
 	return nil
+}
+
+// OpenWhenReady connects to Postgres, retrying with backoff until ctx is done. On a fresh
+// install Postgres is still initializing, and a new pod's address takes a moment to be
+// admitted by Postgres's NetworkPolicy; failing fast would only crash-loop the pod.
+func OpenWhenReady(ctx context.Context, dsn string) (*sql.DB, error) {
+	wait := time.Second
+	for {
+		db, err := Open(ctx, dsn)
+		if err == nil {
+			return db, nil
+		}
+		slog.Warn("waiting for database", "err", err, "retry_in", wait)
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("database never became reachable: %w", err)
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, 10*time.Second)
+	}
 }
