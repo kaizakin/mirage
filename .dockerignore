@@ -1,6 +1,8 @@
 .git
 .claude
 charts
+# The provisioner image ships the store chart.
+!charts/store
 test
 AGENTS.md
 CLAUDE.md
