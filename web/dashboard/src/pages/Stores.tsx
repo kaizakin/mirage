@@ -134,16 +134,16 @@ function CreateStoreForm({ domain }: { domain: string }) {
               create.reset();
             }}
           />
-          <span id="store-slug-preview" className="hint store-preview">
-            <span>
-              Opens at <span className="mono">http://{shownSlug}.{domain}</span>
-            </span>
-            <span>
-              Tools appear as <span className="mono">store-{shownSlug}__…</span>
-            </span>
-          </span>
         </div>
       </div>
+      <p id="store-slug-preview" className="hint store-preview">
+        <span>
+          Opens at <span className="mono">http://{shownSlug}.{domain}</span>
+        </span>
+        <span>
+          Tools appear as <span className="mono">store-{shownSlug}__…</span>
+        </span>
+      </p>
       <div className="form-actions store-submit">
         {problem ? <Alert>{problem.message}</Alert> : <MutationError error={create.error} />}
         <button type="submit" className="button button-primary" disabled={create.isPending}>
