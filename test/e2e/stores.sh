@@ -132,9 +132,13 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' "$(store_field "$a" url)/")
 pass "$a's storefront answers 200 at $(store_field "$a" url)"
 
 log "== MCP registration"
-list=$(tools | jq -r '.result.tools[].name')
+# The gateway picks up new servers on a 5s poll, then connects, so tools trail Ready briefly.
 for s in "$a" "$b"; do
-  grep "^store-${s}__list_orders\$" >/dev/null <<<"$list" || fail "store-${s}__list_orders is not in tools/list"
+  for _ in {1..15}; do
+    tools | jq -r '.result.tools[].name' | grep "^store-${s}__list_orders\$" >/dev/null && break
+    sleep 2
+  done
+  tools | jq -r '.result.tools[].name' | grep "^store-${s}__list_orders\$" >/dev/null || fail "store-${s}__list_orders is not in tools/list"
 done
 products=$(tools '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"store-'"$a"'__list_products","arguments":{}}}' |
   jq -r '.result.structuredContent.products | length')
@@ -147,8 +151,10 @@ kubectl -n "store-$a" run isolation-probe --image=busybox:1.36 --restart=Never \
   --labels=app.kubernetes.io/name=woo-mcp --command -- sleep 300 >/dev/null
 kubectl -n "store-$a" wait --for=condition=Ready pod/isolation-probe --timeout=60s >/dev/null
 probe() { kubectl -n "store-$a" exec isolation-probe -- sh -c "$1" >/dev/null 2>&1 && echo open || echo blocked; }
-own=$(probe "wget -q -T 5 -O /dev/null http://store-wordpress.store-$a.svc.cluster.local/")
-other_wp=$(probe "wget -q -T 5 -O /dev/null http://store-wordpress.store-$b.svc.cluster.local/")
+# TCP connects, which is exactly what NetworkPolicy governs: an HTTP fetch would follow
+# WordPress's redirect to the store's public host, which resolves to 127.0.0.1 in a pod.
+own=$(probe "nc -z -w 5 store-wordpress.store-$a.svc.cluster.local 80")
+other_wp=$(probe "nc -z -w 5 store-wordpress.store-$b.svc.cluster.local 80")
 other_db=$(probe "nc -z -w 5 store-mysql.store-$b.svc.cluster.local 3306")
 [[ $own == open ]] || fail "store A's MCP server cannot reach its own WordPress"
 [[ $other_wp == blocked && $other_db == blocked ]] || fail "store A's MCP server reaches store B: wordpress $other_wp, mysql $other_db"
