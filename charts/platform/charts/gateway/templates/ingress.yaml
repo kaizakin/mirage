@@ -11,13 +11,16 @@ spec:
     - host: {{ .Values.ingress.host }}
       http:
         paths:
-          - path: /mcp
+          {{- /* The MCP endpoint, and the OAuth discovery documents and endpoints clients use to sign in. */}}
+          {{- range list "/mcp" "/oauth" "/.well-known/oauth-protected-resource" "/.well-known/oauth-authorization-server" }}
+          - path: {{ . }}
             pathType: Prefix
             backend:
               service:
-                name: {{ include "gateway.fullname" . }}
+                name: {{ include "gateway.fullname" $ }}
                 port:
                   name: http
+          {{- end }}
     # The dashboard calls /api on its own origin, so its session cookie stays first-party.
     - host: {{ .Values.ingress.dashboardHost }}
       http:

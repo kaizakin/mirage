@@ -20,6 +20,7 @@ import (
 
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
+	"github.com/kaizakin/mirage/internal/oauth"
 	"github.com/kaizakin/mirage/internal/secretbox"
 	"github.com/kaizakin/mirage/internal/store"
 )
@@ -52,6 +53,9 @@ type Options struct {
 	// Chat serves POST /api/chat for the logged-in user; nil leaves the route out.
 	Chat  http.Handler
 	Shops ShopOptions
+	// OAuth is the gateway's authorization server, whose consent page the dashboard serves;
+	// nil leaves the OAuth routes out.
+	OAuth *oauth.Server
 }
 
 // API serves /api.
@@ -83,6 +87,12 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("DELETE /api/keys/{id}", user(a.revokeKey))
 	mux.Handle("GET /api/audit", user(a.listAudit))
 	mux.Handle("GET /api/audit/options", user(a.auditOptions))
+	if a.OAuth != nil {
+		mux.Handle("GET /api/oauth/authorize", user(a.authorizeInfo))
+		mux.Handle("POST /api/oauth/authorize", user(a.authorizeDecision))
+		mux.Handle("GET /api/oauth/apps", user(a.listConnectedApps))
+		mux.Handle("DELETE /api/oauth/apps/{id}", user(a.revokeConnectedApp))
+	}
 	mux.Handle("GET /api/stores", user(a.listShops))
 	mux.Handle("POST /api/stores", user(a.createShop))
 	mux.Handle("DELETE /api/stores/{slug}", user(a.deleteShop))

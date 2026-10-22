@@ -73,6 +73,10 @@ spec:
                   name: {{ .Release.Name }}-gemini
                   key: api-key
                   optional: true
+            - name: PUBLIC_URL
+              value: "{{ .Values.scheme }}://{{ .Values.ingress.host }}"
+            - name: DASHBOARD_URL
+              value: "{{ .Values.scheme }}://{{ .Values.ingress.dashboardHost }}"
             - name: STORE_DOMAIN
               value: {{ .Values.stores.domain | quote }}
             - name: MAX_STORES_PER_USER

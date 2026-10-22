@@ -33,6 +33,10 @@ stores:
   domain: shop.127.0.0.1.nip.io
   maxPerUser: 3
 
+# How clients reach the gateway and dashboard hosts. It forms the OAuth issuer and the
+# dashboard's consent page URL; a plain-HTTP local cluster sets http.
+scheme: https
+
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true
 

@@ -14,6 +14,9 @@
 // The dashboard API is served under /api. Its session cookie is Secure unless
 // INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. POST /api/chat
 // runs an agent whose tool calls go through this gateway's own /mcp as the logged-in user.
+// With PUBLIC_URL (the gateway's public base URL) and DASHBOARD_URL set, MCP clients can also
+// sign in through a browser: the gateway is then an OAuth 2.1 authorization server, and /mcp
+// accepts its access tokens beside API keys.
 // Users create stores under /api/stores; STORE_DOMAIN (default shop.127.0.0.1.nip.io) is the
 // domain their hosts sit under, and MAX_STORES_PER_USER (default 3) caps each user's stores.
 // LLM_PROVIDER picks its model: groq (the default; GROQ_API_KEY, GROQ_MODEL) or gemini
@@ -34,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -47,6 +51,7 @@ import (
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
+	"github.com/kaizakin/mirage/internal/oauth"
 	"github.com/kaizakin/mirage/internal/platform"
 	"github.com/kaizakin/mirage/internal/secretbox"
 	"github.com/kaizakin/mirage/internal/store"
@@ -112,6 +117,11 @@ func run() error {
 		return err
 	}
 
+	authServer, err := oauthServer(st)
+	if err != nil {
+		return err
+	}
+
 	// A buffered slot: requests coalesce while a reload is pending.
 	reload := make(chan struct{}, 1)
 	dashboard := api.New(api.Options{
@@ -125,19 +135,31 @@ func run() error {
 		},
 		SecureCookie: os.Getenv("INSECURE_COOKIES") != "true",
 		Shops:        shops,
+		OAuth:        authServer,
 	})
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", dashboard.Handler())
 	// The middleware verifies the key on every request, so a revoked key stops working
 	// inside an already open session.
-	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.Verifier(st, &auth.Internal{Issuer: issuer, Users: st}), nil)(endpoint.Handler()))
+	verifier := auth.VerifierOptions{Internal: &auth.Internal{Issuer: issuer, Users: st}}
+	var bearer *sdkauth.RequireBearerTokenOptions
+	if authServer != nil {
+		authServer.Register(mux)
+		verifier.OAuth = &auth.OAuth{Tokens: st, Resource: authServer.Resource()}
+		// The 401 names the resource metadata, which is how a client finds where to sign in.
+		bearer = &sdkauth.RequireBearerTokenOptions{ResourceMetadataURL: authServer.ResourceMetadataURL()}
+	}
+	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.Verifier(st, verifier), bearer)(endpoint.Handler()))
 	platform.RegisterHealth(mux, db.PingContext)
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return platform.Serve(ctx, listen, mux) })
 	g.Go(func() error { return syncServers(ctx, st, upstreams, reload) })
+	if authServer != nil {
+		g.Go(func() error { return pruneOAuth(ctx, st) })
+	}
 	return g.Wait()
 }
 
@@ -254,6 +276,36 @@ func syncAdminPassword(ctx context.Context, st *store.Store, email, password, pa
 	}
 	slog.Info("reset admin password to SEED_ADMIN_PASSWORD", "email", email)
 	return nil
+}
+
+// oauthServer returns the authorization server for browser sign-in, or nil when PUBLIC_URL
+// is unset: an issuer has to know its own public address.
+func oauthServer(st *store.Store) (*oauth.Server, error) {
+	public := os.Getenv("PUBLIC_URL")
+	if public == "" {
+		return nil, nil
+	}
+	dashboard := os.Getenv("DASHBOARD_URL")
+	if dashboard == "" {
+		return nil, errors.New("PUBLIC_URL is set but DASHBOARD_URL, where users approve sign-ins, is not")
+	}
+	return oauth.New(st, oauth.Config{Issuer: public, AuthorizeURL: strings.TrimSuffix(dashboard, "/") + "/oauth/authorize"}), nil
+}
+
+// pruneOAuth clears used-up OAuth codes, tokens, grants, and clients every hour.
+func pruneOAuth(ctx context.Context, st *store.Store) error {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if err := st.PruneOAuth(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("pruning OAuth records", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // shopOptions reads where provisioned stores are served and how many each user may have.

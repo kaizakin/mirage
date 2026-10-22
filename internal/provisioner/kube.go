@@ -208,22 +208,21 @@ func (k *Kube) Health(ctx context.Context, namespace string) (Health, error) {
 	if setupDone && err == nil && mcp.Status.AvailableReplicas > 0 {
 		return Health{Ready: true}, nil
 	}
-	waiting, err := k.problem(ctx, namespace)
+	waiting, err := k.problem(ctx, namespace, job, setupDone)
 	if err != nil {
 		return Health{}, err
 	}
 	if waiting == "" {
-		waiting = "the store's setup is still running"
-		if setupDone {
-			waiting = "the store's MCP server is not available yet"
-		}
+		waiting = "the store's MCP server is not available yet"
 	}
 	return Health{Waiting: waiting}, nil
 }
 
 // problem names the first thing holding the store back: a pod that cannot be created (often
-// the namespace's quota), cannot be scheduled, or cannot start its containers.
-func (k *Kube) problem(ctx context.Context, namespace string) (string, error) {
+// the namespace's quota), then, until setup is done, where setup is, and after that a pod that
+// cannot be scheduled or start its containers. Setup comes before the other pods because they
+// wait on it: woo-mcp cannot start until setup publishes the store's credentials.
+func (k *Kube) problem(ctx context.Context, namespace string, job *batchv1.Job, setupDone bool) (string, error) {
 	events, err := k.client.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: "type=Warning,reason=FailedCreate"})
 	if err != nil {
 		return "", err
@@ -231,6 +230,9 @@ func (k *Kube) problem(ctx context.Context, namespace string) (string, error) {
 	if n := len(events.Items); n > 0 {
 		newest := slices.MaxFunc(events.Items, func(a, b corev1.Event) int { return a.LastTimestamp.Compare(b.LastTimestamp.Time) })
 		return fmt.Sprintf("%s %s: %s", strings.ToLower(newest.InvolvedObject.Kind), newest.InvolvedObject.Name, newest.Message), nil
+	}
+	if !setupDone {
+		return k.setupProgress(ctx, namespace, job)
 	}
 	pods, err := k.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -249,4 +251,40 @@ func (k *Kube) problem(ctx context.Context, namespace string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// setupProgress says where the store's setup Job is: why its newest pod cannot run, or else
+// the last line its setup script printed, which names the step it is on.
+func (k *Kube) setupProgress(ctx context.Context, namespace string, job *batchv1.Job) (string, error) {
+	pods, err := k.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=setup"})
+	if err != nil {
+		return "", err
+	}
+	if len(pods.Items) == 0 {
+		return "the store's setup has not started", nil
+	}
+	pod := slices.MaxFunc(pods.Items, func(a, b corev1.Pod) int { return a.CreationTimestamp.Compare(b.CreationTimestamp.Time) })
+	setup := "store setup"
+	if job.Status.Failed > 0 {
+		setup = fmt.Sprintf("store setup (attempt %d)", job.Status.Failed+1)
+	}
+	for _, c := range pod.Status.Conditions {
+		if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
+			return fmt.Sprintf("%s cannot be scheduled: %s", setup, c.Message), nil
+		}
+	}
+	for _, s := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
+		if w := s.State.Waiting; w != nil && w.Reason != "ContainerCreating" && w.Reason != "PodInitializing" {
+			return fmt.Sprintf("%s, container %s: %s %s", setup, s.Name, w.Reason, w.Message), nil
+		}
+	}
+	tail := int64(1)
+	raw, err := k.client.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{Container: "wp-setup", TailLines: &tail}).Do(ctx).Raw()
+	if line := strings.TrimSpace(string(raw)); err == nil && line != "" {
+		if len(line) > 200 {
+			line = strings.ToValidUTF8(line[:200], "") + "…"
+		}
+		return fmt.Sprintf("%s is at: %s", setup, line), nil
+	}
+	return setup + " is still running", nil
 }

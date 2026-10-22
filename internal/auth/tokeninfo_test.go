@@ -18,7 +18,7 @@ func TestVerifierThroughBearerMiddleware(t *testing.T) {
 	revoked := issue(t, store, true)
 
 	var seen User
-	protected := sdkauth.RequireBearerToken(Verifier(store, nil), nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	protected := sdkauth.RequireBearerToken(Verifier(store, VerifierOptions{}), nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen, _ = UserFromTokenInfo(sdkauth.TokenInfoFromContext(r.Context()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -52,7 +52,7 @@ func TestVerifierThroughBearerMiddleware(t *testing.T) {
 
 func TestVerifierReportsOutageAsServerError(t *testing.T) {
 	k, _ := GenerateKey()
-	_, err := Verifier(brokenStore{}, nil)(t.Context(), k.Plaintext, nil)
+	_, err := Verifier(brokenStore{}, VerifierOptions{})(t.Context(), k.Plaintext, nil)
 	if err == nil || errors.Is(err, sdkauth.ErrInvalidToken) {
 		t.Fatalf("err = %v, want a non-ErrInvalidToken error so the middleware answers 500", err)
 	}
@@ -73,7 +73,7 @@ func TestRejectionsRevealNothingToTheCaller(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			protected := sdkauth.RequireBearerToken(Verifier(tc.store, nil), nil)(http.NotFoundHandler())
+			protected := sdkauth.RequireBearerToken(Verifier(tc.store, VerifierOptions{}), nil)(http.NotFoundHandler())
 			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 			req.Header.Set("Authorization", "Bearer "+tc.key)
 			rec := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func (u usersByID) UserByID(_ context.Context, id int64) (User, error) {
 func TestVerifierAcceptsInternalTokensForLiveUsers(t *testing.T) {
 	issuer, _ := NewTokenIssuer()
 	users := usersByID{ada.ID: ada}
-	verify := Verifier(fakeKeys{}, &Internal{Issuer: issuer, Users: users})
+	verify := Verifier(fakeKeys{}, VerifierOptions{Internal: &Internal{Issuer: issuer, Users: users}})
 
 	info, err := verify(t.Context(), issuer.Mint(ada.ID, time.Minute), nil)
 	if u, _ := UserFromTokenInfo(info); err != nil || u != ada {
@@ -113,7 +113,7 @@ func TestVerifierAcceptsInternalTokensForLiveUsers(t *testing.T) {
 	if _, err := verify(t.Context(), issuer.Mint(ada.ID, time.Minute), nil); !errors.Is(err, sdkauth.ErrInvalidToken) {
 		t.Fatalf("token for a deleted user: err = %v, want ErrInvalidToken", err)
 	}
-	if _, err := Verifier(fakeKeys{}, nil)(t.Context(), issuer.Mint(ada.ID, time.Minute), nil); !errors.Is(err, sdkauth.ErrInvalidToken) {
+	if _, err := Verifier(fakeKeys{}, VerifierOptions{})(t.Context(), issuer.Mint(ada.ID, time.Minute), nil); !errors.Is(err, sdkauth.ErrInvalidToken) {
 		t.Fatalf("internal tokens disabled: err = %v, want ErrInvalidToken", err)
 	}
 	if _, err := verify(t.Context(), "gwi_forged.mac", nil); !errors.Is(err, sdkauth.ErrInvalidToken) {

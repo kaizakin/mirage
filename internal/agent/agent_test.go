@@ -60,7 +60,7 @@ func gateway(t *testing.T, issuer *auth.TokenIssuer, user auth.User) (url string
 			mu.Unlock()
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "order #17 after=" + in.After}}}, nil, nil
 		})
-	verify := auth.Verifier(nil, &auth.Internal{Issuer: issuer, Users: oneUser{user}})
+	verify := auth.Verifier(nil, auth.VerifierOptions{Internal: &auth.Internal{Issuer: issuer, Users: oneUser{user}}})
 	srv := httptest.NewServer(sdkauth.RequireBearerToken(verify, nil)(
 		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)))
 	t.Cleanup(srv.Close)
