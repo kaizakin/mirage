@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -26,9 +27,14 @@ func (s *Store) CreateOAuthClient(ctx context.Context, c OAuthClient) error {
 // OAuthClientByID returns a registered client, or ErrNotFound.
 func (s *Store) OAuthClientByID(ctx context.Context, id string) (OAuthClient, error) {
 	c := OAuthClient{ID: id}
-	err := s.db.QueryRowContext(ctx, `SELECT name, redirect_uris FROM oauth_clients WHERE id = $1`, id).
-		Scan(&c.Name, &c.RedirectURIs)
-	return c, notFound(err)
+	// As JSON: database/sql cannot scan a Postgres array into a slice with every Go version.
+	var uris []byte
+	err := s.db.QueryRowContext(ctx, `SELECT name, to_json(redirect_uris) FROM oauth_clients WHERE id = $1`, id).
+		Scan(&c.Name, &uris)
+	if err != nil {
+		return c, notFound(err)
+	}
+	return c, json.Unmarshal(uris, &c.RedirectURIs)
 }
 
 // OAuthCode is an authorization code's request, kept until the client redeems it.

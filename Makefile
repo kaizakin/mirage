@@ -9,6 +9,9 @@ STORE_PORT ?= 15432
 # Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>;
 # the dashboard image builds from web/dashboard. woo-mcp runs in each provisioned store.
 SERVICES := woo-mcp currency-mcp gateway provisioner
+# Images built from build/<name>.Dockerfile: the Go services, plus the store setup Job's wp-cli
+# with WooCommerce and the theme built in.
+BUILD_IMAGES := $(SERVICES) shop-setup
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
 # A provisioned store's slug, for the targets that test one store (test-live).
@@ -21,7 +24,7 @@ help:
 	@echo "Usage:"
 	@echo "  make build           Compile every Go package"
 	@echo "  make lint            gofmt, go vet, staticcheck, and revive over the Go code"
-	@echo "  make images          Build the $(SERVICES) images and import them into k3d cluster $(K3D_CLUSTER)"
+	@echo "  make images          Build the $(BUILD_IMAGES) and dashboard images and import them into k3d cluster $(K3D_CLUSTER)"
 	@echo "  make helm-install    Build images and install the platform chart (release: $(RELEASE_NAME), ns: $(NAMESPACE))"
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and every provisioned store"
@@ -42,10 +45,10 @@ lint:
 	go run github.com/mgechev/revive@v1.17.1 -formatter plain -set_exit_status -exclude ./web/... ./...
 
 images:
-	for s in $(SERVICES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
+	for s in $(BUILD_IMAGES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
 	docker build -t mirage/dashboard:$(IMAGE_TAG) web/dashboard
 # One image per import: k3d reported success importing several at once yet dropped one.
-	for s in $(SERVICES) dashboard; do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
+	for s in $(BUILD_IMAGES) dashboard; do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
 
 # A changed image ID rolls the pod even though the tag stays the same. Stores' woo-mcp pods
 # take the image as it is when the store is provisioned.
@@ -92,4 +95,5 @@ test-store:
 e2e:
 	test/e2e/api-roles.sh
 	test/e2e/drills.sh
+	test/e2e/oauth.sh
 	test/e2e/stores.sh
