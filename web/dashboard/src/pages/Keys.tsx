@@ -70,7 +70,7 @@ function AppRow({ app }: { app: ConnectedApp }) {
       <td className="date">{formatDate(app.created_at)}</td>
       <td className="date">{app.last_used_at ? formatDate(app.last_used_at) : <span className="muted">Never</span>}</td>
       <td className="actions-cell">
-        <ConfirmButton label="Revoke" subject={app.client_name} confirmLabel="Sign out app" busy={revoke.isPending} onConfirm={() => { revoke.mutate(); }} />
+        <ConfirmButton label="Revoke" subject={app.client_name} confirmLabel="Revoke app" busy={revoke.isPending} onConfirm={() => { revoke.mutate(); }} />
         <MutationError error={revoke.error} />
       </td>
     </tr>
