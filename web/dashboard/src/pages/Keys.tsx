@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/endpoints";
-import type { ApiKey, CreatedKey } from "../api/types";
+import type { ApiKey, ConnectedApp, CreatedKey } from "../api/types";
 import { Badge } from "../components/Badge";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { CopyField } from "../components/CopyField";
@@ -57,6 +57,68 @@ function KeyRow({ apiKey, showOwner }: { apiKey: ApiKey; showOwner: boolean }) {
   );
 }
 
+function AppRow({ app }: { app: ConnectedApp }) {
+  const client = useQueryClient();
+  const revoke = useMutation({
+    mutationFn: () => api.revokeConnectedApp(app.id),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["connected-apps"] }),
+  });
+
+  return (
+    <tr>
+      <td>{app.client_name}</td>
+      <td className="date">{formatDate(app.created_at)}</td>
+      <td className="date">{app.last_used_at ? formatDate(app.last_used_at) : <span className="muted">Never</span>}</td>
+      <td className="actions-cell">
+        <ConfirmButton label="Revoke" subject={app.client_name} confirmLabel="Sign out app" busy={revoke.isPending} onConfirm={() => { revoke.mutate(); }} />
+        <MutationError error={revoke.error} />
+      </td>
+    </tr>
+  );
+}
+
+function ConnectedApps() {
+  const apps = useQuery({ queryKey: ["connected-apps"], queryFn: api.connectedApps });
+
+  return (
+    <section aria-labelledby="apps-title">
+      <h2 id="apps-title" className="section-title">
+        Connected apps
+      </h2>
+      <p className="muted">Apps you signed in to with your browser, such as Claude Code. Revoking one signs it out immediately.</p>
+      {apps.isPending ? (
+        <Loading />
+      ) : apps.isError ? (
+        <ErrorNotice error={apps.error} />
+      ) : apps.data.length === 0 ? (
+        <EmptyState icon="lock" title="No connected apps">
+          Apps appear here after you allow them on the browser sign-in screen.
+        </EmptyState>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">App</th>
+                <th scope="col">Connected</th>
+                <th scope="col">Last used</th>
+                <th scope="col" className="actions-cell">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {apps.data.map((app) => (
+                <AppRow key={app.id} app={app} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function KeysPage() {
   const user = useCurrentUser();
   const client = useQueryClient();
@@ -78,6 +140,10 @@ export function KeysPage() {
         <div>
           <h1 id="keys-title">API keys</h1>
           <p className="muted">Keys let MCP clients call tools through the gateway as you.</p>
+          <p className="muted small">
+            Claude Code can also sign in with your browser: <code>claude mcp add --transport http gw {gatewayUrl}</code>,
+            then run <code>/mcp</code> in Claude Code and choose Authenticate.
+          </p>
         </div>
         <button type="button" className="button button-primary" disabled={generate.isPending} onClick={() => { generate.mutate(); }}>
           <Icon name="plus" />
@@ -122,6 +188,7 @@ export function KeysPage() {
           </table>
         </div>
       )}
+      <ConnectedApps />
     </section>
   );
 }
