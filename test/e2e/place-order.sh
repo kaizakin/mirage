@@ -3,7 +3,7 @@
 # checkout would, and prints the order id.
 #
 # Usage: place-order.sh <product name>
-# Env: NAMESPACE, RELEASE_NAME, CREDENTIALS_SECRET (default woo-api-credentials).
+# Env: STORE, the slug of the provisioned store to order from.
 set -euo pipefail
 source "$(dirname "$0")/store-api.bash"
 

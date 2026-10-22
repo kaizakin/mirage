@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The definition of done, end to end, with two users: A (the seeded admin, in the
 # dashboard and its chat) and B (an invited member, through Claude Code with B's key).
+# A provisions a fresh store for the run, and it is deleted at the end.
 # Re-run it after every change; it exits non-zero on the first broken line.
 #
 # Needs the platform deployed with a chat model key (the <release>-groq Secret, or
@@ -8,18 +9,19 @@
 # jq, and curl on PATH.
 #
 # Env: NAMESPACE, RELEASE_NAME; DASH_URL (default http://dash.127.0.0.1.nip.io),
-# GATEWAY_URL (default http://gateway.127.0.0.1.nip.io/mcp), SHOP_URL (default
-# http://shop.127.0.0.1.nip.io).
+# GATEWAY_URL (default http://gateway.127.0.0.1.nip.io/mcp).
 set -euo pipefail
 
 dash=${DASH_URL:-http://dash.127.0.0.1.nip.io}
 gateway=${GATEWAY_URL:-http://gateway.127.0.0.1.nip.io/mcp}
-shop=${SHOP_URL:-http://shop.127.0.0.1.nip.io}
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 b_email="dod-b-$RANDOM@example.com"
 b_id=""
 product_name="DoD Mug $(date +%H%M%S)"
+store="dod-$(date +%H%M%S)"
+tools="store-${store}"
+store_created=no
 
 secret() { kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" | base64 -d; }
 step() { printf '\n%s  == %s\n' "$(date +%T)" "$*"; }
@@ -57,22 +59,34 @@ audit_since() { # audit_since <jar> <id>: audit rows newer than id, as JSON line
   api "$1" GET "/api/audit?limit=200" | jq -c --argjson after "$2" '.entries[] | select(.id > $after)'
 }
 
-product_created=no
-
 cleanup() {
   [[ -n $b_id ]] && api "$work/a" DELETE "/api/members/$b_id" >/dev/null 2>&1 || true
-  [[ $product_created == yes ]] && "$here/trash-product.sh" "$product_name" || true
+  [[ $store_created == yes ]] && api "$work/a" DELETE "/api/stores/$store" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
 
-step "A logs in to the dashboard and sees every upstream connected"
+step "A logs in to the dashboard and creates a store; it is provisioned and connected"
 api "$work/a" POST /api/login "$(jq -n --arg p "$(secret "$RELEASE_NAME-gateway" admin-password)" '{email: "admin@mirage.local", password: $p}')" >/dev/null
-servers=$(api "$work/a" GET /api/servers)
-for slug in woo currency deepwiki; do
+api "$work/a" POST /api/stores "{\"name\": \"DoD Tea $store\", \"slug\": \"$store\"}" >/dev/null
+store_created=yes
+for _ in {1..180}; do
+  status=$(api "$work/a" GET /api/stores | jq -r --arg s "$store" '.[] | select(.slug == $s) | .status')
+  [[ $status == ready ]] && break
+  [[ $status == failed ]] && fail "store $store failed: $(api "$work/a" GET /api/stores | jq -r --arg s "$store" '.[] | select(.slug == $s) | .reason')"
+  sleep 5
+done
+[[ $status == ready ]] || fail "store $store is still $status"
+shop=$(api "$work/a" GET /api/stores | jq -r --arg s "$store" '.[] | select(.slug == $s) | .url')
+for _ in {1..15}; do
+  servers=$(api "$work/a" GET /api/servers)
+  [[ $(jq -r --arg s "$tools" '.[] | select(.slug == $s) | .status' <<<"$servers") == connected ]] && break
+  sleep 2
+done
+for slug in "$tools" currency deepwiki; do
   [[ $(jq -r ".[] | select(.slug == \"$slug\") | .status" <<<"$servers") == connected ]] || fail "$slug is not connected: $servers"
 done
-pass "woo, currency, and deepwiki are connected"
+pass "store $store is Ready at $shop; $tools, currency, and deepwiki are connected"
 audit_start=$(api "$work/a" GET "/api/audit?limit=1" | jq '.entries[0].id // 0')
 
 step "A invites B as a member; B accepts, is refused admin pages, and generates a key"
@@ -88,15 +102,14 @@ step "Claude Code connects with B's key and lists the gateway's tools"
 jq -n --arg url "$gateway" --arg auth "Bearer $b_key" \
   '{mcpServers: {gw: {type: "http", url: $url, headers: {Authorization: $auth}}}}' >"$work/b-mcp.json"
 tools=$(claude_b "List the names of every tool you have from the gw MCP server, one per line, nothing else.")
-for t in woo__list_orders currency__convert deepwiki__ask_wiki_question; do
+for t in "${tools}__list_orders" currency__convert deepwiki__ask_wiki_question; do
   grep -q "$t" <<<"$tools" || fail "Claude Code (B) does not list $t: $tools"
 done
-pass "Claude Code (B) lists woo, currency, and deepwiki tools"
+pass "Claude Code (B) lists the store's, currency's, and deepwiki's tools"
 
 step "A creates a product through the chat; it appears on the storefront"
-events=$(chat "$work/a" "Create a product named \"$product_name\" priced 349.")
-grep -q '"name":"woo__create_product"' <<<"$events" || fail "chat did not call woo__create_product: $events"
-product_created=yes
+events=$(chat "$work/a" "Create a product named \"$product_name\" priced 349 in the $store store.")
+grep -q "\"name\":\"${tools}__create_product\"" <<<"$events" || fail "chat did not call ${tools}__create_product: $events"
 grep -q '"event":"answer"' <<<"$events" || fail "chat gave no answer: $events"
 slug=$(tr '[:upper:] ' '[:lower:]-' <<<"$product_name")
 storefront=no
@@ -111,18 +124,18 @@ done
 pass "\"$product_name\" was created by chat and is on the storefront"
 
 step "An order for it is placed, as A would at the storefront checkout"
-order_id=$("$here/place-order.sh" "$product_name")
+order_id=$(STORE=$store "$here/place-order.sh" "$product_name")
 pass "order #$order_id placed"
 
 step "A asks the chat what orders came in today and gets that order"
-events=$(chat "$work/a" "What orders came in today?")
-grep -q '"name":"woo__list_orders"' <<<"$events" || fail "chat did not call woo__list_orders: $events"
+events=$(chat "$work/a" "What orders came in today at the $store store?")
+grep -q "\"name\":\"${tools}__list_orders\"" <<<"$events" || fail "chat did not call ${tools}__list_orders: $events"
 jq -r 'select(.event == "answer") | .data.text' <<<"$events" | grep "$order_id" >/dev/null ||
   fail "the answer does not mention order $order_id: $(jq -r 'select(.event == "answer") | .data.text' <<<"$events")"
 pass "the chat's answer includes order #$order_id"
 
 step "B asks Claude Code a two-server question"
-answer=$(claude_b "List today's orders with their totals in USD.")
+answer=$(claude_b "List today's orders in the $store store with their totals in USD.")
 grep -q "$order_id" <<<"$answer" || fail "Claude Code (B) answer lacks order $order_id: $answer"
 pass "Claude Code (B) answered with order #$order_id"
 
@@ -132,12 +145,12 @@ jq -e --arg u admin@mirage.local 'select(.user_email == $u and .tool == "create_
   fail "no ok create_product row under A: $rows"
 jq -e --arg u admin@mirage.local 'select(.user_email == $u and .tool == "list_orders")' <<<"$rows" >/dev/null ||
   fail "no list_orders row under A: $rows"
-jq -e --arg u "$b_email" 'select(.user_email == $u and .server == "woo" and .tool == "list_orders")' <<<"$rows" >/dev/null ||
-  fail "no woo list_orders row under B: $rows"
+jq -e --arg u "$b_email" --arg s "$tools" 'select(.user_email == $u and .server == $s and .tool == "list_orders")' <<<"$rows" >/dev/null ||
+  fail "no $tools list_orders row under B: $rows"
 jq -e --arg u "$b_email" 'select(.user_email == $u and .server == "currency" and .tool == "convert")' <<<"$rows" >/dev/null ||
   fail "no currency convert row under B: the two-server prompt did not use currency: $rows"
 [[ -z $(jq -r 'select(.user_email == "")' <<<"$rows") ]] || fail "rows without a user: $rows"
-pass "A's chat calls are A's, B's Claude Code calls (woo and currency) are B's, and none are anonymous"
+pass "A's chat calls are A's, B's Claude Code calls (the store's and currency's) are B's, and none are anonymous"
 
 step "B's key is revoked; Claude Code is refused"
 api "$work/b" DELETE "/api/keys/${b_key:3:8}" >/dev/null

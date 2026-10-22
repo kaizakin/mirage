@@ -1,5 +1,4 @@
 # Subchart overrides go under the subchart's name; each subchart's own values.yaml holds its defaults.
-store: {}
 gateway:
   ingress:
     host: gateway.127.0.0.1.nip.io

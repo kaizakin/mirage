@@ -4,16 +4,16 @@ SHELL := bash
 RELEASE_NAME ?= mirage
 NAMESPACE ?= mirage
 CHART_PATH ?= charts/platform
-# Created by the setup hook, so Helm does not own it; must match store.setup.credentialsSecret
-CREDENTIALS_SECRET ?= woo-api-credentials
 LIVE_PORT ?= 8081
 STORE_PORT ?= 15432
 # Go services built from cmd/<name> with build/<name>.Dockerfile into image mirage/<name>;
-# the dashboard image builds from web/dashboard.
+# the dashboard image builds from web/dashboard. woo-mcp runs in each provisioned store.
 SERVICES := woo-mcp currency-mcp gateway provisioner
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
-export NAMESPACE RELEASE_NAME CREDENTIALS_SECRET LIVE_PORT STORE_PORT
+# A provisioned store's slug, for the targets that test one store (test-live).
+STORE ?=
+export NAMESPACE RELEASE_NAME LIVE_PORT STORE_PORT STORE
 
 .PHONY: help build lint images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e
 
@@ -24,10 +24,10 @@ help:
 	@echo "  make images          Build the $(SERVICES) images and import them into k3d cluster $(K3D_CLUSTER)"
 	@echo "  make helm-install    Build images and install the platform chart (release: $(RELEASE_NAME), ns: $(NAMESPACE))"
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
-	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and API credentials"
-	@echo "  make test-live       Run the WooCommerce client tests against the live store"
+	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and every provisioned store"
+	@echo "  make test-live       Run the WooCommerce client tests against store STORE=<slug>"
 	@echo "  make test-store      Run the migration tests against the cluster Postgres"
-	@echo "  make e2e             Run the API role checks and failure drills against the deployed platform"
+	@echo "  make e2e             Run the API role checks, failure drills, and store provisioning checks"
 	@echo "  make status          Check status of the release and pods"
 
 build:
@@ -47,8 +47,10 @@ images:
 # One image per import: k3d reported success importing several at once yet dropped one.
 	for s in $(SERVICES) dashboard; do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
 
-# A changed image ID rolls the pod even though the tag stays the same.
-IMAGE_ID_FLAGS = $(foreach s,$(SERVICES) dashboard,--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
+# A changed image ID rolls the pod even though the tag stays the same. Stores' woo-mcp pods
+# take the image as it is when the store is provisioned.
+CHART_IMAGES := currency-mcp gateway provisioner dashboard
+IMAGE_ID_FLAGS = $(foreach s,$(CHART_IMAGES),--set $(s).imageId=$$(docker image inspect -f '{{.Id}}' mirage/$(s):$(IMAGE_TAG)))
 
 helm-install: images
 	helm install $(RELEASE_NAME) $(CHART_PATH) \
@@ -62,10 +64,11 @@ helm-upgrade: images
 		--create-namespace \
 		$(IMAGE_ID_FLAGS)
 
-# helm uninstall keeps StatefulSet volumes and the hook-created Secret. A reinstall would then reuse a MySQL
-# data dir initialized with the old password, so every uninstall wipes them.
+# helm uninstall keeps StatefulSet volumes, and a reinstall would then reuse a Postgres data dir
+# initialized with the old password, so every uninstall wipes them. Stores go too: without the
+# provisioner nothing would ever remove their namespaces.
 clean-state:
-	kubectl -n $(NAMESPACE) delete secret $(CREDENTIALS_SECRET) --ignore-not-found
+	kubectl delete namespace -l app.kubernetes.io/managed-by=mirage-provisioner --wait=false
 # --wait=false: volumes stay protected until uninstall stops the pods using them
 	kubectl -n $(NAMESPACE) delete pvc -l app.kubernetes.io/instance=$(RELEASE_NAME) --wait=false
 
@@ -89,3 +92,4 @@ test-store:
 e2e:
 	test/e2e/api-roles.sh
 	test/e2e/drills.sh
+	test/e2e/stores.sh

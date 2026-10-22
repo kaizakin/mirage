@@ -4,7 +4,7 @@
 #   - a member gets 403 on every server and member endpoint, and can manage only their own keys
 #   - an admin can manage servers, and disabling one takes its tools out of /mcp within seconds
 #   - no response body ever contains a credential: neither the sentinel this script stores
-#     nor the real upstream credentials held in the cluster's Secrets
+#     nor the real upstream credentials held in the cluster's Secrets, stores' included
 # It creates a throwaway member and server and removes them when it ends.
 #
 # Env: NAMESPACE, RELEASE_NAME; DASH_URL (default http://dash.127.0.0.1.nip.io),
@@ -113,7 +113,11 @@ check "deepwiki's tools leave /mcp within 5s" yes "$gone"
 check "admin re-enables deepwiki" 204 "$(api "$work/admin" PATCH /api/servers/deepwiki '{"enabled":true}')"
 
 log "== no response body contains a credential"
-credentials=("$sentinel" "$(secret "$RELEASE_NAME-woo-mcp" token)" "$(secret "$RELEASE_NAME-currency-mcp" apiKey)")
+credentials=("$sentinel" "$(secret "$RELEASE_NAME-currency-mcp" apiKey)")
+# Each provisioned store's MCP server token, which the gateway holds sealed.
+for ns in $(kubectl get namespace -l app.kubernetes.io/managed-by=mirage-provisioner -o name | cut -d/ -f2); do
+  credentials+=("$(kubectl -n "$ns" get secret store-woo-mcp -o 'jsonpath={.data.token}' | base64 -d)")
+done
 leaks=0
 for c in "${credentials[@]}"; do
   if grep -qF -- "$c" "$bodies"; then leaks=$((leaks + 1)); fi

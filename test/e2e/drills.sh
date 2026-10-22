@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Failure drills against the deployed gateway, over one MCP session held open through the
 # ingress, the way a real client holds it:
-#   1. the woo-mcp pod dies mid-session: currency keeps working, woo fails cleanly, then recovers
+#   1. a store's woo-mcp pod dies mid-session: currency keeps working, the store's tools fail
+#      cleanly, then recover (it uses the first Ready provisioned store)
 #   2. currency__slow_echo(60) times out at the gateway's 20s limit while other calls proceed
 #   3. a server disabled in the database disappears from tools/list, with tools/list_changed
 #      pushed to the session; re-enabling brings it back
@@ -54,25 +55,29 @@ for _ in {1..60}; do
   sleep 1
 done
 [[ $(tools | wc -l) -ge 10 ]] || fail "not every upstream is connected: $(tools | tr '\n' ' ')"
-log "session open, $(tools | wc -l) tools from all three upstreams"
+log "session open, $(tools | wc -l) tools"
 
-log "== drill 1: delete the woo-mcp pod mid-session"
+store=$(psql_gateway "SELECT slug FROM shops WHERE status = 'ready' ORDER BY id LIMIT 1")
+[[ -n $store ]] || fail "drill 1 needs a Ready store; create one on the dashboard's Stores page"
+woo="store-${store}"
+
+log "== drill 1: delete store $store's woo-mcp pod mid-session"
 # --wait: a terminating pod keeps serving through its graceful shutdown, so the outage
 # starts only once it is gone.
-kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=woo-mcp --wait=true >/dev/null
+kubectl -n "store-$store" delete pod -l app.kubernetes.io/name=woo-mcp --wait=true >/dev/null
 currency=$(call currency__convert '{"amount":10,"from":"USD","to":"EUR"}')
-woo=$(call woo__list_products '{}')
+listed=$(call "${woo}__list_products" '{}')
 log "currency__convert   -> $currency"
-log "woo__list_products  -> $woo"
-[[ $currency == ok* ]] || fail "currency stopped working while woo was down"
-[[ $woo == "error upstream woo "* ]] || fail "woo did not fail with a clean upstream error"
+log "${woo}__list_products -> $listed"
+[[ $currency == ok* ]] || fail "currency stopped working while the store's MCP server was down"
+[[ $listed == "error upstream $woo "* ]] || fail "the store's tools did not fail with a clean upstream error"
 for _ in {1..30}; do
-  woo=$(call woo__list_products '{}')
-  [[ $woo == ok* ]] && break
+  listed=$(call "${woo}__list_products" '{}')
+  [[ $listed == ok* ]] && break
   sleep 2
 done
-[[ $woo == ok* ]] || fail "woo did not recover"
-log "woo__list_products  -> recovered on its own: ${woo:0:60}"
+[[ $listed == ok* ]] || fail "the store's MCP server did not recover"
+log "${woo}__list_products -> recovered on its own: ${listed:0:60}"
 
 log "== drill 2: currency__slow_echo(60) against the 20s call timeout"
 start=$SECONDS

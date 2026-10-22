@@ -66,7 +66,7 @@ tools() {
 }
 
 cleanup() {
-  for s in "$a" "$b" "$c" "lim-1-$run" "lim-2-$run" "lim-3-$run"; do
+  for s in "$a" "$b" "$c"; do
     api "$work/admin" DELETE "/api/stores/$s" >/dev/null 2>&1 || true
   done
   [[ -n $member_id ]] && api "$work/admin" DELETE "/api/members/$member_id" >/dev/null 2>&1 || true
@@ -77,42 +77,47 @@ trap cleanup EXIT
 
 [[ $(api "$work/admin" POST /api/login "$(jq -n --arg p "$(secret "$RELEASE_NAME-gateway" admin-password)" '{email: "admin@mirage.local", password: $p}')") == 200* ]] ||
   fail "admin login"
+# Every store here belongs to a fresh member, so the per-user limit counts only them.
+token=$(api "$work/admin" POST /api/invites '{"email":"stores-e2e-'"$run"'@example.com","role":"member"}' | cut -d' ' -f2- | jq -r .token)
+member_id=$(api "$work/owner" POST /api/invites/accept "{\"token\":\"$token\",\"password\":\"stores e2e password\"}" | cut -d' ' -f2- | jq -r .id)
 
 log "== two stores at once"
 start=$SECONDS
 for s in "$a" "$b"; do
-  out=$(api "$work/admin" POST /api/stores "{\"name\":\"Store $s\",\"slug\":\"$s\"}")
+  out=$(api "$work/owner" POST /api/stores "{\"name\":\"Store $s\",\"slug\":\"$s\"}")
   [[ $out == 201* ]] || fail "create $s: $out"
 done
 [[ $(store_status "$a") == provisioning && $(store_status "$b") == provisioning ]] || fail "new stores are not Provisioning"
 pass "created $a and $b; both Provisioning"
 
-out=$(api "$work/admin" POST /api/stores "{\"name\":\"Store $a\",\"slug\":\"$a\"}")
+out=$(api "$work/owner" POST /api/stores "{\"name\":\"Store $a\",\"slug\":\"$a\"}")
 [[ $out == 200* ]] || fail "creating $a again answered $out, want 200 with the same store"
 [[ $(api "$work/admin" GET /api/stores | cut -d' ' -f2- | jq --arg s "$a" '[.[] | select(.slug == $s)] | length') == 1 ]] || fail "creating again duplicated the store"
 pass "creating $a again returns it unchanged (200), with no duplicate"
 
-log "== the per-user limit"
-token=$(api "$work/admin" POST /api/invites '{"email":"stores-e2e-'"$run"'@example.com","role":"member"}' | cut -d' ' -f2- | jq -r .token)
-member=$(api "$work/member" POST /api/invites/accept "{\"token\":\"$token\",\"password\":\"stores e2e password\"}")
-member_id=$(cut -d' ' -f2- <<<"$member" | jq -r .id)
-for i in 1 2 3; do
-  out=$(api "$work/member" POST /api/stores "{\"name\":\"Limit $i\",\"slug\":\"lim-$i-$run\"}")
-  [[ $out == 201* ]] || fail "member's store $i: $out"
+log "== a provisioner restart mid-provisioning"
+for _ in {1..30}; do
+  kubectl -n "store-$a" get deployment store-woo-mcp >/dev/null 2>&1 && kubectl -n "store-$b" get deployment store-woo-mcp >/dev/null 2>&1 && break
+  sleep 2
 done
-out=$(api "$work/member" POST /api/stores "{\"name\":\"Limit 4\",\"slug\":\"lim-4-$run\"}")
+kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=provisioner --wait=true >/dev/null
+pass "restarted the provisioner while $a was $(store_status "$a") and $b was $(store_status "$b")"
+
+log "== the per-user limit"
+out=$(api "$work/owner" POST /api/stores "{\"name\":\"Limit\",\"slug\":\"$c\"}")
+[[ $out == 201* ]] || fail "the member's third store: $out"
+out=$(api "$work/owner" POST /api/stores "{\"name\":\"Over\",\"slug\":\"over-$run\"}")
 [[ $out == 409* ]] || fail "a fourth store answered $out, want 409"
 pass "a member's fourth store is refused: $(cut -d' ' -f2- <<<"$out" | jq -r .error)"
-for i in 1 2 3; do
-  [[ $(api "$work/member" DELETE "/api/stores/lim-$i-$run") == 202* ]] || fail "member deleting store $i"
-done
-[[ $(api "$work/member" GET /api/stores | cut -d' ' -f2- | jq --arg a "$a" '[.[] | select(.slug == $a)] | length') == 0 ]] ||
-  fail "a member can see the admin's store"
-pass "the member deleted their stores while provisioning, and cannot see anyone else's"
+[[ $(api "$work/owner" DELETE "/api/stores/$c") == 202* ]] || fail "deleting $c while it provisions"
+others=$(api "$work/owner" GET /api/stores | cut -d' ' -f2- | jq '[.[] | select(.owner_email != "stores-e2e-'"$run"'@example.com")] | length')
+[[ $others == 0 ]] || fail "the member sees $others stores that are not theirs"
+pass "the member deleted $c while it provisioned, and sees only their own stores"
 
 wait_for "$a" ready 900
 wait_for "$b" ready 900
-pass "$a and $b are Ready after $((SECONDS - start))s"
+wait_for "$c" gone 600
+pass "$a and $b are Ready after $((SECONDS - start))s despite the restart; $c is gone"
 
 log "== what each store got"
 for s in "$a" "$b"; do
@@ -161,22 +166,11 @@ other_db=$(probe "nc -z -w 5 store-mysql.store-$b.svc.cluster.local 3306")
 pass "from store A's MCP server: own WordPress $own; store B's WordPress $other_wp; store B's MySQL $other_db"
 kubectl -n "store-$a" delete pod isolation-probe --wait=false >/dev/null
 
-log "== a provisioner restart mid-provisioning"
-[[ $(api "$work/admin" POST /api/stores "{\"name\":\"Store $c\",\"slug\":\"$c\"}") == 201* ]] || fail "create $c"
-for _ in {1..30}; do
-  kubectl -n "store-$c" get deployment store-woo-mcp >/dev/null 2>&1 && break
-  sleep 2
-done
-kubectl -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=provisioner --wait=true >/dev/null
-pass "restarted the provisioner while $c was $(store_status "$c")"
-wait_for "$c" ready 900
-pass "$c still became Ready"
-
 log "== teardown"
-for s in "$a" "$b" "$c"; do
-  [[ $(api "$work/admin" DELETE "/api/stores/$s") == 202* ]] || fail "delete $s"
+for s in "$a" "$b"; do
+  [[ $(api "$work/owner" DELETE "/api/stores/$s") == 202* ]] || fail "delete $s"
 done
-for s in "$a" "$b" "$c"; do wait_for "$s" gone 600; done
+for s in "$a" "$b"; do wait_for "$s" gone 600; done
 for s in "$a" "$b" "$c"; do
   kubectl get namespace "store-$s" >/dev/null 2>&1 && fail "namespace store-$s still exists"
   [[ -z $(kubectl get pv -o jsonpath="{.items[?(@.spec.claimRef.namespace==\"store-$s\")].metadata.name}") ]] || fail "store-$s left volumes behind"

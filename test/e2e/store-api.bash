@@ -1,14 +1,16 @@
-# Sourced by scripts that call the store's WooCommerce REST API directly, with the
-# application password the setup hook published. Sourcing it opens a port-forward to
-# WordPress that closes when the script exits.
+# Sourced by scripts that call one provisioned store's WooCommerce REST API directly, with
+# the application password its setup Job published. Sourcing it opens a port-forward to the
+# store's WordPress that closes when the script exits.
 #
-# Env: NAMESPACE, RELEASE_NAME, CREDENTIALS_SECRET (default woo-api-credentials).
+# Env: STORE, the store's slug (its namespace is store-$STORE).
 
+: "${STORE:?set STORE to the slug of a provisioned store}"
+store_ns="store-$STORE"
 store_port=18082
-store_secret() { kubectl -n "$NAMESPACE" get secret "${CREDENTIALS_SECRET:-woo-api-credentials}" -o "jsonpath={.data.$1}" | base64 -d; }
+store_secret() { kubectl -n "$store_ns" get secret woo-api-credentials -o "jsonpath={.data.$1}" | base64 -d; }
 store_auth="$(store_secret username):$(store_secret password)"
 
-kubectl -n "$NAMESPACE" port-forward "svc/$RELEASE_NAME-wordpress" "$store_port:80" >/dev/null &
+kubectl -n "$store_ns" port-forward svc/store-wordpress "$store_port:80" >/dev/null &
 store_port_forward=$!
 trap 'kill "$store_port_forward"' EXIT
 for _ in {1..30}; do
