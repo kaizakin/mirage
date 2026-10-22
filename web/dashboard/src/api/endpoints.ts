@@ -4,7 +4,10 @@ import type {
   AuditFilter,
   AuditOptions,
   AuditPage,
+  AuthorizeCheck,
+  AuthorizeDecision,
   ChatMessage,
+  ConnectedApp,
   CreatedInvite,
   CreatedKey,
   Invite,
@@ -53,6 +56,12 @@ export const api = {
   keys: (all: boolean) => json<ApiKey[]>("GET", all ? "/api/keys?all=1" : "/api/keys"),
   createKey: () => json<CreatedKey>("POST", "/api/keys"),
   revokeKey: (id: string) => call("DELETE", `/api/keys/${seg(id)}`),
+
+  checkAuthorize: (query: string) => json<AuthorizeCheck>("GET", `/api/oauth/authorize?${query}`),
+  decideAuthorize: (query: string, approve: boolean) =>
+    json<AuthorizeDecision>("POST", "/api/oauth/authorize", { query, approve }),
+  connectedApps: () => json<ConnectedApp[]>("GET", "/api/oauth/apps"),
+  revokeConnectedApp: (id: number) => call("DELETE", `/api/oauth/apps/${id}`),
 
   audit: (filter: AuditFilter, before: number): Promise<AuditPage> => {
     const params = new URLSearchParams({ limit: "50" });

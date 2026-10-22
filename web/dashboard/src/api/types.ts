@@ -97,6 +97,20 @@ export interface CreatedKey {
   key: string;
 }
 
+/** The gateway either names the client asking for consent or says where to send the browser back to it. */
+export type AuthorizeCheck = { client_name: string } | { redirect: string };
+
+export interface AuthorizeDecision {
+  redirect: string;
+}
+
+export interface ConnectedApp {
+  id: number;
+  client_name: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
 export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "canceled";
 
 export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled"];
