@@ -1441,6 +1441,16 @@ tbody tr.detail-row:hover td {
   text-align: center;
 }
 
+.consent-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.consent-actions .button {
+  height: 2.5rem;
+}
+
 .rule {
   font-size: 0.78rem;
   color: var(--muted);

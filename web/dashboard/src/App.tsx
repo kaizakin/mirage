@@ -4,20 +4,21 @@ import { Layout } from "./components/Layout";
 import { AdminsOnly, ErrorNotice, Loading } from "./components/States";
 import { AcceptInvitePage } from "./pages/AcceptInvite";
 import { AuditPage } from "./pages/Audit";
+import { AuthorizePage } from "./pages/Authorize";
 import { ChatPage } from "./pages/Chat";
 import { KeysPage } from "./pages/Keys";
 import { LoginPage } from "./pages/Login";
 import { MembersPage } from "./pages/Members";
 import { ServersPage } from "./pages/Servers";
 import { StoresPage } from "./pages/Stores";
-import { UserContext, useCurrentUser, useMe } from "./session";
+import { loginPath, UserContext, useCurrentUser, useMe } from "./session";
 
 function RequireUser({ children }: { children: ReactNode }) {
   const me = useMe();
   const location = useLocation();
   if (me.isPending) return <Loading />;
   if (me.isError) return <ErrorNotice error={me.error} />;
-  if (me.data === null) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (me.data === null) return <Navigate to={loginPath(location.pathname + location.search)} replace />;
   return <UserContext value={me.data}>{children}</UserContext>;
 }
 
@@ -34,6 +35,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/accept" element={<AcceptInvitePage />} />
+      <Route path="/oauth/authorize" element={<AuthorizePage />} />
       <Route
         element={
           <RequireUser>

@@ -22,3 +22,14 @@ export function setSession(client: QueryClient, user: User | null): void {
   client.removeQueries({ predicate: (query) => query.queryKey[0] !== meKey[0] });
   client.getMutationCache().clear();
 }
+
+// safeNext accepts only same-origin paths, so a crafted ?next= cannot send a signed-in user off-site.
+// Browsers read "//host" and "/\host" as another origin.
+export function safeNext(next: string | null): string | null {
+  if (next === null || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return null;
+  return next;
+}
+
+export function loginPath(next: string): string {
+  return `/login?${new URLSearchParams({ next }).toString()}`;
+}

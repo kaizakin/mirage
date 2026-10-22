@@ -1,26 +1,19 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { errorMessage, isStatus } from "../api/client";
 import { api } from "../api/endpoints";
 import { BrandMark } from "../components/Icon";
 import { Alert, Loading } from "../components/States";
-import { setSession, useMe } from "../session";
+import { safeNext, setSession, useMe } from "../session";
 import { PasswordInput } from "../components/PasswordInput";
-
-function redirectTarget(state: unknown): string {
-  if (typeof state === "object" && state !== null && "from" in state && typeof state.from === "string") {
-    return state.from;
-  }
-  return "/";
-}
 
 export function LoginPage() {
   const me = useMe();
   const client = useQueryClient();
   const navigate = useNavigate();
-  const location = useLocation();
-  const target = redirectTarget(location.state);
+  const [params] = useSearchParams();
+  const target = safeNext(params.get("next")) ?? "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
