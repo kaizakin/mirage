@@ -10,6 +10,7 @@ import type {
   ConnectedApp,
   CreatedInvite,
   CreatedKey,
+  HealthReport,
   Invite,
   Member,
   NewServer,
@@ -72,6 +73,8 @@ export const api = {
     if (filter.userId > 0) params.set("user_id", String(filter.userId));
     return json<AuditPage>("GET", `/api/audit?${params.toString()}`);
   },
+  health: () => json<HealthReport>("GET", "/api/health"),
+
   auditOptions: () => json<AuditOptions>("GET", "/api/audit/options"),
 
   chat: (messages: ChatMessage[], signal: AbortSignal) => send("POST", "/api/chat", { messages }, signal),

@@ -951,6 +951,177 @@ td.actions-cell .alert {
   margin: 0;
 }
 
+.health-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+}
+
+.health-summary > div {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+.health-summary dt,
+.health-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.health-summary dd,
+.health-stats dd {
+  font-variant-numeric: tabular-nums;
+}
+
+.health-summary dd {
+  margin: var(--space-1) 0 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.health-summary-of {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.health-summary .health-summary-alarm {
+  background: var(--red-soft);
+  border-color: var(--red-border);
+}
+
+.health-summary-alarm dt,
+.health-summary-alarm dd {
+  color: var(--red);
+}
+
+.health-list .server-removed {
+  background: var(--surface-2);
+}
+
+.health-list .server-id {
+  grid-area: auto;
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+}
+
+.health-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.health-idle {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.rate {
+  display: inline-grid;
+  gap: 4px;
+  min-width: 4.5rem;
+}
+
+.rate-warn {
+  color: var(--amber);
+}
+
+.rate-bad {
+  color: var(--red);
+}
+
+.rate-bar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--grey-soft);
+  overflow: hidden;
+}
+
+.rate-bar > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--green);
+}
+
+.rate-warn .rate-bar > span {
+  background: var(--amber);
+}
+
+.rate-bad .rate-bar > span {
+  background: var(--red);
+}
+
+.health-summary .rate {
+  min-width: 0;
+}
+
+.health-summary .rate-bar {
+  max-width: 8rem;
+}
+
+.health-failure {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.health-failure-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.health-audit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+.health-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@container (width < 560px) {
+  .health-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .health-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .health-summary dd {
+    font-size: 1.25rem;
+  }
+
+  .health-audit-link {
+    margin-left: 0;
+  }
+}
+
 .store-provisioning {
   border-left: 3px solid var(--amber);
 }

@@ -6,6 +6,7 @@ import { AcceptInvitePage } from "./pages/AcceptInvite";
 import { AuditPage } from "./pages/Audit";
 import { AuthorizePage } from "./pages/Authorize";
 import { ChatPage } from "./pages/Chat";
+import { HealthPage } from "./pages/Health";
 import { KeysPage } from "./pages/Keys";
 import { LoginPage } from "./pages/Login";
 import { MembersPage } from "./pages/Members";
@@ -49,6 +50,14 @@ export function App() {
           element={
             <RequireAdmin>
               <ServersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="health"
+          element={
+            <RequireAdmin>
+              <HealthPage />
             </RequireAdmin>
           }
         />

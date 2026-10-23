@@ -115,6 +115,30 @@ export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "cancele
 
 export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled", "rate_limited"];
 
+/** "removed" is a deleted server that still has calls in the health window. */
+export type HealthStatus = ServerStatus | "removed";
+
+export interface ServerHealth {
+  server: string;
+  status: HealthStatus;
+  reason?: string;
+  /** When the current status began; absent for disabled and removed servers. */
+  since?: string;
+  calls: number;
+  failed: number;
+  error_rate: number;
+  p50_ms: number;
+  p95_ms: number;
+  last_error?: string;
+  last_outcome?: Outcome;
+  last_error_at?: string;
+}
+
+export interface HealthReport {
+  window_minutes: number;
+  servers: ServerHealth[];
+}
+
 export interface AuditEntry {
   id: number;
   user_email: string;
