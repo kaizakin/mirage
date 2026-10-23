@@ -34,10 +34,13 @@ wp option update home "$SITE_URL"
 wp option update siteurl "$SITE_URL"
 wp option update blogname "$STORE_TITLE"
 wp option update blogdescription "$STORE_TAGLINE"
-wp theme is-installed "$STORE_THEME" || wp theme install "$STORE_THEME"
+# The setup image may carry pinned copies (build/shop-setup.Dockerfile); without one, the
+# plugin or theme comes from wordpress.org.
+bundled() { if [ -f "/opt/mirage/$1/$2.zip" ]; then echo "/opt/mirage/$1/$2.zip"; else echo "$2"; fi; }
+wp theme is-installed "$STORE_THEME" || wp theme install "$(bundled themes "$STORE_THEME")"
 wp theme is-active "$STORE_THEME" || wp theme activate "$STORE_THEME"
 
-wp plugin is-installed woocommerce || wp plugin install woocommerce
+wp plugin is-installed woocommerce || wp plugin install "$(bundled plugins woocommerce)"
 wp plugin is-active woocommerce || wp plugin activate woocommerce
 wp rewrite structure '/%postname%/'
 wp option update woocommerce_currency "$STORE_CURRENCY"

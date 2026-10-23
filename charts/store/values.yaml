@@ -32,6 +32,9 @@ limits:
 shop:
   setup:
     hook: false
+    # wp-cli with WooCommerce and the theme built in (build/shop-setup.Dockerfile), so setup
+    # makes no downloads.
+    wpCliImage: mirage/shop-setup:dev
     tagline: Loose-leaf tea and teaware, brewed in small batches
   wordpress:
     persistence:
