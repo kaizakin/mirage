@@ -101,6 +101,7 @@ func (a *API) Handler() http.Handler {
 	}
 
 	mux.Handle("GET /api/servers", admin(a.listServers))
+	mux.Handle("GET /api/health", admin(a.health))
 	mux.Handle("POST /api/servers", admin(a.createServer))
 	mux.Handle("PATCH /api/servers/{slug}", admin(a.updateServer))
 	mux.Handle("DELETE /api/servers/{slug}", admin(a.deleteServer))

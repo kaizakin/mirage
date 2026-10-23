@@ -55,6 +55,7 @@ import (
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/affinity"
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
+	"github.com/kaizakin/mirage/internal/gateway/metrics"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
 	"github.com/kaizakin/mirage/internal/gateway/ratelimit"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
@@ -124,7 +125,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st, SessionID: sessionID, Limiter: limiter})
+	measures := metrics.New(upstreams)
+	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: measures.Recorder(st), SessionID: sessionID, Limiter: limiter})
 
 	issuer, err := auth.NewTokenIssuer()
 	if err != nil {
@@ -177,6 +179,8 @@ func run() error {
 	}
 	mux.Handle("/mcp", mcpHandler)
 	platform.RegisterHealth(mux, db.PingContext)
+	// Not routed by the ingress: only in-cluster scrapers reach it.
+	mux.Handle("GET /metrics", measures.Handler())
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
