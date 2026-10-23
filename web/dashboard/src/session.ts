@@ -24,9 +24,15 @@ export function setSession(client: QueryClient, user: User | null): void {
 }
 
 // safeNext accepts only same-origin paths, so a crafted ?next= cannot send a signed-in user off-site.
-// Browsers read "//host" and "/\host" as another origin.
+// Browsers read "//host" and "/\host" as another origin, and drop tabs and newlines first, so
+// "/<tab>/host" would become "//host": any whitespace or control character is refused too.
 export function safeNext(next: string | null): string | null {
-  if (next === null || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return null;
+  if (next === null || !next.startsWith("/") || /\s/.test(next)) return null;
+  for (let i = 0; i < next.length; i++) {
+    const code = next.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) return null;
+  }
+  if (next.startsWith("//") || next.startsWith("/\\")) return null;
   return next;
 }
 
