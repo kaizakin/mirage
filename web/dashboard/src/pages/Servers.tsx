@@ -2,23 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/endpoints";
-import type { Server, ServerStatus } from "../api/types";
-import { Badge, type Tone } from "../components/Badge";
+import type { Server } from "../api/types";
+import { Badge } from "../components/Badge";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { Icon } from "../components/Icon";
 import { EmptyState, ErrorNotice, Loading, MutationError } from "../components/States";
 import { formatDate } from "../format";
+import { statusTone } from "../tones";
 import { ServerFields } from "./ServerFields";
 import { draftFrom, emptyDraft, toNewServer, toPatch } from "./serverForm";
 
 const serversKey = ["servers"] as const;
-
-const statusTone: Record<ServerStatus, Tone> = {
-  connected: "green",
-  connecting: "amber",
-  unreachable: "red",
-  disabled: "grey",
-};
 
 function AddServerForm({ onDone }: { onDone: () => void }) {
   const client = useQueryClient();

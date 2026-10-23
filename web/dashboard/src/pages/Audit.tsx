@@ -2,21 +2,13 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/endpoints";
-import { oneOf, outcomes, type AuditEntry, type AuditFilter, type AuditOptions, type Outcome } from "../api/types";
-import { Badge, type Tone } from "../components/Badge";
+import { oneOf, outcomes, type AuditEntry, type AuditFilter, type AuditOptions } from "../api/types";
+import { Badge } from "../components/Badge";
 import { Icon } from "../components/Icon";
 import { EmptyState, ErrorNotice, Loading } from "../components/States";
 import { formatDuration } from "../format";
 import { useCurrentUser } from "../session";
-
-const outcomeStyle: Record<Outcome, { label: string; tone: Tone }> = {
-  ok: { label: "Success", tone: "green" },
-  tool_error: { label: "Tool error", tone: "red" },
-  timeout: { label: "Timed out", tone: "amber" },
-  unreachable: { label: "Unreachable", tone: "red" },
-  canceled: { label: "Canceled", tone: "grey" },
-  rate_limited: { label: "Rate limited", tone: "amber" },
-};
+import { outcomeStyle } from "../tones";
 
 // The filter lives in the URL, so a filtered view survives a reload and can be shared.
 function useFilter(): [AuditFilter, (next: AuditFilter) => void] {
