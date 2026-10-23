@@ -34,6 +34,18 @@ type Options struct {
 	// CallTimeout bounds each upstream tools/call. Default 20s.
 	CallTimeout time.Duration
 	Version     string
+	// SessionID makes new session IDs; with several replicas, IDs name the replica that owns
+	// the session (see package affinity). Default: random IDs.
+	SessionID func() string
+	// Limiter caps each user's tool calls; nil means no limit.
+	Limiter Limiter
+}
+
+// Limiter decides whether a user may make another call now. A Limiter error lets the call
+// through: the limit protects capacity, and a store outage should not stop every tool.
+type Limiter interface {
+	Allow(ctx context.Context, userID int64) (bool, time.Duration, error)
+	Limit() int
 }
 
 // Server is the gateway's downstream MCP endpoint.
@@ -41,6 +53,7 @@ type Server struct {
 	upstreams   Upstreams
 	audit       audit.Recorder
 	callTimeout time.Duration
+	limiter     Limiter
 	server      *mcp.Server
 
 	mu         sync.Mutex // serializes Sync
@@ -53,6 +66,7 @@ func New(upstreams Upstreams, opts Options) *Server {
 		upstreams:   upstreams,
 		audit:       opts.Audit,
 		callTimeout: opts.CallTimeout,
+		limiter:     opts.Limiter,
 		registered:  map[string]*mcp.Tool{},
 	}
 	if s.callTimeout <= 0 {
@@ -62,6 +76,7 @@ func New(upstreams Upstreams, opts Options) *Server {
 	// has connected, and clients must know to expect tools/list_changed.
 	s.server = mcp.NewServer(&mcp.Implementation{Name: "mirage-gateway", Version: opts.Version}, &mcp.ServerOptions{
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{ListChanged: true}},
+		GetSessionID: opts.SessionID,
 	})
 	return s
 }
@@ -157,6 +172,10 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 		s.record(ctx, entry)
 	}()
 
+	if msg, limited := s.overLimit(ctx, entry.UserID); limited {
+		entry.Outcome, entry.Error = audit.RateLimited, msg
+		return errorResult(msg), nil
+	}
 	res, outcome, msg := s.route(ctx, slug, tool, req.Params.Arguments)
 	entry.Outcome, entry.Error = outcome, msg
 	if outcome == audit.Canceled {
@@ -219,4 +238,22 @@ func firstText(res *mcp.CallToolResult) string {
 // errorResult is a tool error the model can read and act on, rather than a protocol error.
 func errorResult(msg string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: msg}}}
+}
+
+// overLimit reports whether the user is over their call limit, with a message saying when
+// they may call again.
+func (s *Server) overLimit(ctx context.Context, userID int64) (string, bool) {
+	if s.limiter == nil || userID == 0 {
+		return "", false
+	}
+	ok, retry, err := s.limiter.Allow(ctx, userID)
+	if err != nil {
+		slog.ErrorContext(ctx, "checking the rate limit; allowing the call", "err", err)
+		return "", false
+	}
+	if ok {
+		return "", false
+	}
+	return fmt.Sprintf("rate limit reached: at most %d tool calls a minute; try again in %ds",
+		s.limiter.Limit(), int(retry.Round(time.Second).Seconds())), true
 }

@@ -111,9 +111,9 @@ export interface ConnectedApp {
   last_used_at?: string;
 }
 
-export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "canceled";
+export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "canceled" | "rate_limited";
 
-export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled"];
+export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled", "rate_limited"];
 
 export interface AuditEntry {
   id: number;

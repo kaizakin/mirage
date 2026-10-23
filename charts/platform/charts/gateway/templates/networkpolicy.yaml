@@ -23,3 +23,11 @@ spec:
       ports:
         - port: http
           protocol: TCP
+    # Other replicas, forwarding requests for MCP sessions this replica owns.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: http
+          protocol: TCP

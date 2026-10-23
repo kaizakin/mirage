@@ -14,8 +14,13 @@ metadata:
   labels:
     {{- include "gateway.labels" . | nindent 4 }}
 spec:
-  # Sessions live in the pod's memory; more replicas need sticky routing first.
-  replicas: 1
+  # MCP sessions live in their replica's memory; each replica forwards requests for another's
+  # sessions to it (package affinity), so any number of replicas share one endpoint.
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       {{- include "gateway.selectorLabels" . | nindent 6 }}
@@ -73,6 +78,17 @@ spec:
                   name: {{ .Release.Name }}-gemini
                   key: api-key
                   optional: true
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SESSION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: session-key
+            - name: RATE_LIMIT_PER_MINUTE
+              value: {{ .Values.rateLimitPerMinute | quote }}
             - name: PUBLIC_URL
               value: "{{ .Values.scheme }}://{{ .Values.ingress.host }}"
             - name: DASHBOARD_URL
@@ -116,6 +132,12 @@ spec:
               type: RuntimeDefault
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          lifecycle:
+            # Traefik takes a moment to drop a terminating pod from its endpoints; keep
+            # serving until it has, so a rollout does not cut requests off.
+            preStop:
+              sleep:
+                seconds: 5
           readinessProbe:
             httpGet:
               path: /readyz

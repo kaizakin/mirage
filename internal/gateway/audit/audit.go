@@ -22,6 +22,8 @@ const (
 	Timeout Outcome = "timeout"
 	// Canceled means the client went away before the call finished.
 	Canceled Outcome = "canceled"
+	// RateLimited means the caller was over their limit, so the call was not made.
+	RateLimited Outcome = "rate_limited"
 )
 
 // Entry is one tool call. UserID is 0 when the caller was not authenticated.

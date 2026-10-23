@@ -14,6 +14,10 @@
 // The dashboard API is served under /api. Its session cookie is Secure unless
 // INSECURE_COOKIES=true, which only a plain-HTTP local cluster should set. POST /api/chat
 // runs an agent whose tool calls go through this gateway's own /mcp as the logged-in user.
+// RATE_LIMIT_PER_MINUTE (default 120, 0 for none) caps each user's tool calls per minute,
+// across replicas.
+// With POD_IP and SESSION_KEY set, several replicas can serve /mcp behind any load balancer:
+// each forwards requests for another replica's session to that replica.
 // With PUBLIC_URL (the gateway's public base URL) and DASHBOARD_URL set, MCP clients can also
 // sign in through a browser: the gateway is then an OAuth 2.1 authorization server, and /mcp
 // accepts its access tokens beside API keys.
@@ -29,6 +33,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,8 +53,10 @@ import (
 	"github.com/kaizakin/mirage/internal/agent/llm"
 	"github.com/kaizakin/mirage/internal/api"
 	"github.com/kaizakin/mirage/internal/auth"
+	"github.com/kaizakin/mirage/internal/gateway/affinity"
 	"github.com/kaizakin/mirage/internal/gateway/downstream"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
+	"github.com/kaizakin/mirage/internal/gateway/ratelimit"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 	"github.com/kaizakin/mirage/internal/oauth"
 	"github.com/kaizakin/mirage/internal/platform"
@@ -101,10 +108,23 @@ func run() error {
 
 	// The manager reports changes to the endpoint, which re-syncs its tools. Nothing connects
 	// before syncServers first reconciles, so endpoint is set by the time OnChange runs.
+	router, err := sessionRouter(os.Getenv("LISTEN_ADDR"))
+	if err != nil {
+		return err
+	}
+	var sessionID func() string
+	if router != nil {
+		sessionID = router.NewSessionID
+	}
+
 	var endpoint *downstream.Server
 	upstreams := upstream.NewManager(box, upstream.Options{OnChange: func() { endpoint.Sync() }})
 	defer upstreams.Close()
-	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st})
+	limiter, err := rateLimiter(st)
+	if err != nil {
+		return err
+	}
+	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: st, SessionID: sessionID, Limiter: limiter})
 
 	issuer, err := auth.NewTokenIssuer()
 	if err != nil {
@@ -150,16 +170,19 @@ func run() error {
 		// The 401 names the resource metadata, which is how a client finds where to sign in.
 		bearer = &sdkauth.RequireBearerTokenOptions{ResourceMetadataURL: authServer.ResourceMetadataURL()}
 	}
-	mux.Handle("/mcp", sdkauth.RequireBearerToken(auth.Verifier(st, verifier), bearer)(endpoint.Handler()))
+	mcpHandler := sdkauth.RequireBearerToken(auth.Verifier(st, verifier), bearer)(endpoint.Handler())
+	if router != nil {
+		// Outside authentication: a session's own replica checks the credential.
+		mcpHandler = router.Handler(mcpHandler)
+	}
+	mux.Handle("/mcp", mcpHandler)
 	platform.RegisterHealth(mux, db.PingContext)
 
 	// Every job shares ctx: a signal, or any job failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return platform.Serve(ctx, listen, mux) })
 	g.Go(func() error { return syncServers(ctx, st, upstreams, reload) })
-	if authServer != nil {
-		g.Go(func() error { return pruneOAuth(ctx, st) })
-	}
+	g.Go(func() error { return housekeeping(ctx, st) })
 	return g.Wait()
 }
 
@@ -278,6 +301,25 @@ func syncAdminPassword(ctx context.Context, st *store.Store, email, password, pa
 	return nil
 }
 
+// sessionRouter returns the router that lets several replicas share /mcp sessions, or nil
+// for a single replica: it needs POD_IP, where other replicas reach this one, and
+// SESSION_KEY (base64, at least 16 bytes), which all replicas share.
+func sessionRouter(listen string) (*affinity.Router, error) {
+	podIP := os.Getenv("POD_IP")
+	if podIP == "" {
+		return nil, nil
+	}
+	key, err := base64.StdEncoding.DecodeString(os.Getenv("SESSION_KEY"))
+	if err != nil {
+		return nil, fmt.Errorf("SESSION_KEY is not base64: %w", err)
+	}
+	_, port, err := net.SplitHostPort(cmp.Or(listen, ":8080"))
+	if err != nil {
+		return nil, err
+	}
+	return affinity.New(net.JoinHostPort(podIP, port), key)
+}
+
 // oauthServer returns the authorization server for browser sign-in, or nil when PUBLIC_URL
 // is unset: an issuer has to know its own public address.
 func oauthServer(st *store.Store) (*oauth.Server, error) {
@@ -292,13 +334,31 @@ func oauthServer(st *store.Store) (*oauth.Server, error) {
 	return oauth.New(st, oauth.Config{Issuer: public, AuthorizeURL: strings.TrimSuffix(dashboard, "/") + "/oauth/authorize"}), nil
 }
 
-// pruneOAuth clears used-up OAuth codes, tokens, grants, and clients every hour.
-func pruneOAuth(ctx context.Context, st *store.Store) error {
+// rateLimiter returns the per-user tool call limit, RATE_LIMIT_PER_MINUTE (default 120), or
+// nil when it is 0.
+func rateLimiter(st *store.Store) (downstream.Limiter, error) {
+	perMinute := 120
+	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be a whole number, got %q", v)
+		}
+		perMinute = n
+	}
+	if perMinute == 0 {
+		return nil, nil
+	}
+	return ratelimit.New(st, perMinute), nil
+}
+
+// housekeeping clears used-up OAuth records and old rate limit counts every hour. Any
+// replica may do it; the deletes are idempotent.
+func housekeeping(ctx context.Context, st *store.Store) error {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
-		if err := st.PruneOAuth(ctx); err != nil && ctx.Err() == nil {
-			slog.Error("pruning OAuth records", "err", err)
+		if err := errors.Join(st.PruneOAuth(ctx), st.PruneRateLimits(ctx)); err != nil && ctx.Err() == nil {
+			slog.Error("housekeeping", "err", err)
 		}
 		select {
 		case <-ctx.Done():

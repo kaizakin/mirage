@@ -37,6 +37,12 @@ stores:
 # dashboard's consent page URL; a plain-HTTP local cluster sets http.
 scheme: https
 
+# Replicas behind the one /mcp endpoint; MCP sessions follow their replica (package affinity).
+replicaCount: 2
+
+# Tool calls each user may make per minute, across all replicas and credentials; 0 for none.
+rateLimitPerMinute: 120
+
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true
 

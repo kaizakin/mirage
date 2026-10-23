@@ -15,6 +15,7 @@ const outcomeStyle: Record<Outcome, { label: string; tone: Tone }> = {
   timeout: { label: "Timed out", tone: "amber" },
   unreachable: { label: "Unreachable", tone: "red" },
   canceled: { label: "Canceled", tone: "grey" },
+  rate_limited: { label: "Rate limited", tone: "amber" },
 };
 
 // The filter lives in the URL, so a filtered view survives a reload and can be shared.
