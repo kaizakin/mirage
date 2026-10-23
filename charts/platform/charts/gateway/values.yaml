@@ -43,6 +43,11 @@ replicaCount: 2
 # Tool calls each user may make per minute, across all replicas and credentials; 0 for none.
 rateLimitPerMinute: 120
 
+# Where Prometheus runs (make monitoring); only it may scrape /metrics, which the ingress
+# does not route.
+metrics:
+  prometheusNamespace: monitoring
+
 # Mark the dashboard session cookie Secure. Only a plain-HTTP local cluster turns this off.
 secureCookies: true
 

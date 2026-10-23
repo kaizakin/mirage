@@ -1,0 +1,13 @@
+{{- /* Grafana's sidecar loads ConfigMaps with this label (make monitoring). */ -}}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  mirage-gateway.json: |
+    {{- .Files.Get "files/grafana/mirage-gateway.json" | nindent 4 }}
+{{- end }}

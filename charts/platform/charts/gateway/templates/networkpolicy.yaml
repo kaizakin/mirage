@@ -23,6 +23,17 @@ spec:
       ports:
         - port: http
           protocol: TCP
+    # Prometheus, scraping /metrics, when the monitoring stack is installed.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.metrics.prometheusNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: http
+          protocol: TCP
     # Other replicas, forwarding requests for MCP sessions this replica owns.
     - from:
         - podSelector:

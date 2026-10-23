@@ -14,11 +14,13 @@ SERVICES := woo-mcp currency-mcp gateway provisioner
 BUILD_IMAGES := $(SERVICES) shop-setup
 IMAGE_TAG ?= dev
 K3D_CLUSTER ?= mirage
+MONITORING_NAMESPACE ?= monitoring
+KUBE_PROMETHEUS_STACK_VERSION ?= 92.13.1
 # A provisioned store's slug, for the targets that test one store (test-live).
 STORE ?=
 export NAMESPACE RELEASE_NAME LIVE_PORT STORE_PORT STORE
 
-.PHONY: help build lint images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e
+.PHONY: help build lint images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e monitoring
 
 help:
 	@echo "Usage:"
@@ -32,6 +34,7 @@ help:
 	@echo "  make test-store      Run the migration tests against the cluster Postgres"
 	@echo "  make e2e             Run the API role checks, failure drills, and store provisioning checks"
 	@echo "  make status          Check status of the release and pods"
+	@echo "  make monitoring      Install Prometheus and Grafana, then upgrade the platform so it is scraped"
 
 build:
 	go build ./...
@@ -98,3 +101,15 @@ e2e:
 	test/e2e/oauth.sh
 	test/e2e/scaling.sh
 	test/e2e/stores.sh
+
+# Prometheus and Grafana (kube-prometheus-stack) in their own namespace. The platform is
+# upgraded afterwards: its ServiceMonitor and Grafana dashboard need the operator's CRDs.
+monitoring:
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KUBE_PROMETHEUS_STACK_VERSION) \
+		--namespace $(MONITORING_NAMESPACE) \
+		--create-namespace \
+		--values deploy/monitoring/values.yaml \
+		--wait --timeout 10m
+	$(MAKE) helm-upgrade

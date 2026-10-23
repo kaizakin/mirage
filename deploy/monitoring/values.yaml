@@ -1,0 +1,56 @@
+# kube-prometheus-stack for the local k3d cluster: Prometheus, Grafana with its cluster
+# dashboards, node-exporter, and kube-state-metrics. Install with `make monitoring`.
+# The Mirage dashboard and the gateway's ServiceMonitor come from the platform chart.
+
+# k3s runs the scheduler, controller manager, proxy, and etcd inside one process and does not
+# expose their metrics endpoints; scraping them would only show permanently failing targets.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+alertmanager:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    # Pick up ServiceMonitors from every namespace, not only those labelled for this release.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+grafana:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.127.0.0.1.nip.io
+  # Load dashboards from ConfigMaps labelled grafana_dashboard in any namespace; the
+  # platform chart ships the Mirage one that way.
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
