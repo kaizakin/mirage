@@ -10,6 +10,20 @@ import (
 	"github.com/kaizakin/mirage/internal/auth"
 )
 
+func TestServerURLsMustBePublic(t *testing.T) {
+	body := `{"slug":"meta","url":"http://169.254.169.254/latest/meta-data","auth_type":"none"}`
+	rec := httptest.NewRecorder()
+	(&API{}).createServer(rec, httptest.NewRequest(http.MethodPost, "/api/servers", strings.NewReader(body)))
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "link-local address") {
+		t.Fatalf("create: %d %s, want 400 naming the link-local address", rec.Code, rec.Body)
+	}
+
+	internal := "http://mirage-postgres:5432/"
+	if msg := (serverInput{URL: &internal}).validate(false); !strings.Contains(msg, "not a public domain") {
+		t.Fatalf("patch validation = %q, want a refusal of the cluster-internal name", msg)
+	}
+}
+
 func TestSameOriginBlocksForgeableRequests(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	h := sameOrigin(ok)

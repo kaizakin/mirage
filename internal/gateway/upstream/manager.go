@@ -23,6 +23,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/kaizakin/mirage/internal/gateway/ssrf"
 	"github.com/kaizakin/mirage/internal/secretbox"
 )
 
@@ -43,6 +44,9 @@ type Config struct {
 	AuthType      AuthType
 	AuthHeader    string
 	CredentialEnc []byte
+	// Internal marks a server the platform itself created, such as a provisioned store's.
+	// Only internal servers may connect to private, loopback, or link-local addresses.
+	Internal bool
 }
 
 // Status is an upstream's connection state.
@@ -319,6 +323,7 @@ func jitter(d time.Duration) time.Duration {
 // see, such as "connection refused" or "timed out".
 func Reason(err error) string {
 	var dnsErr *net.DNSError
+	var blocked *ssrf.BlockedError
 	switch {
 	case err == nil:
 		return ""
@@ -330,6 +335,8 @@ func Reason(err error) string {
 		return "connection reset"
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return "connection closed"
+	case errors.As(err, &blocked):
+		return blocked.Error()
 	case errors.As(err, &dnsErr):
 		return "host not found: " + dnsErr.Name
 	}

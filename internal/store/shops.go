@@ -207,7 +207,7 @@ func registerShopServer(ctx context.Context, db querier, box *secretbox.Box, sho
 		return err
 	}
 	res, err := db.ExecContext(ctx, `
-		INSERT INTO servers (slug, url, auth_type, credential_enc, shop_id) VALUES ($1, $2, 'bearer', $3, $4)
+		INSERT INTO servers (slug, url, auth_type, credential_enc, shop_id, internal) VALUES ($1, $2, 'bearer', $3, $4, true)
 		ON CONFLICT (slug) DO NOTHING`, srv.Slug, srv.URL, credential, shopID)
 	if err != nil {
 		return classify(err)

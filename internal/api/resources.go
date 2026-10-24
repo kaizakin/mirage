@@ -3,12 +3,12 @@ package api
 import (
 	"encoding/hex"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
+	"github.com/kaizakin/mirage/internal/gateway/ssrf"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 	"github.com/kaizakin/mirage/internal/store"
 )
@@ -32,6 +32,8 @@ type serverJSON struct {
 	Reason        string     `json:"reason,omitempty"`
 	Tools         []toolJSON `json:"tools"`
 	CreatedAt     time.Time  `json:"created_at"`
+	// Internal servers were created by the platform and may reach cluster-internal addresses.
+	Internal bool `json:"internal"`
 	// Store is the slug of the provisioned store that owns this server, if any.
 	Store string `json:"store,omitempty"`
 }
@@ -50,7 +52,7 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		s := serverJSON{Slug: row.Slug, URL: row.URL, Enabled: row.Enabled, AuthType: row.AuthType,
 			AuthHeader: row.AuthHeader, HasCredential: row.HasCredential, CreatedAt: row.CreatedAt, Tools: []toolJSON{},
-			Store: row.Shop}
+			Internal: row.Internal, Store: row.Shop}
 		st, running := live[row.Slug]
 		switch {
 		case !row.Enabled:
@@ -88,8 +90,8 @@ func (in serverInput) validate(creating bool) string {
 		}
 	}
 	if in.URL != nil {
-		if u, err := url.Parse(*in.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return "url must be an absolute http or https URL"
+		if err := ssrf.ValidateURL(*in.URL); err != nil {
+			return err.Error()
 		}
 	}
 	if in.AuthType != nil {

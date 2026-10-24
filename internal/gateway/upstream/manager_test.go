@@ -84,7 +84,7 @@ func headerConfig(t *testing.T, box *secretbox.Box, slug, addr, credential strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Config{Slug: slug, URL: "http://" + addr + "/mcp", AuthType: AuthHeader, AuthHeader: "X-Api-Key", CredentialEnc: sealed}
+	return Config{Slug: slug, URL: "http://" + addr + "/mcp", AuthType: AuthHeader, AuthHeader: "X-Api-Key", CredentialEnc: sealed, Internal: true}
 }
 
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -199,6 +199,26 @@ func TestReconcileStopsRemovedUpstreamsAndReportsChanges(t *testing.T) {
 	}
 }
 
+func TestOnlyInternalUpstreamsReachPrivateAddresses(t *testing.T) {
+	box := newBox(t)
+	up := startUpstream(t, "s3cret")
+	m := NewManager(box, fastOptions)
+	t.Cleanup(m.Close)
+	trusted := headerConfig(t, box, "cur", up.addr, "s3cret")
+	untrusted := headerConfig(t, box, "evil", up.addr, "s3cret")
+	untrusted.Internal = false
+	m.Reconcile(t.Context(), []Config{trusted, untrusted})
+
+	waitFor(t, "internal upstream connected", func() bool { return state(m, "cur").Status == Connected })
+	waitFor(t, "untrusted upstream unreachable", func() bool { return state(m, "evil").Status == Unreachable })
+	if reason, want := state(m, "evil").Reason, "ssrf: refusing to connect to 127.0.0.1 (loopback address)"; reason != want {
+		t.Fatalf("reason = %q, want %q", reason, want)
+	}
+	if _, err := m.Session("evil"); err == nil || !strings.Contains(err.Error(), "ssrf: refusing") {
+		t.Fatalf("Session(evil) error = %v, want the ssrf reason", err)
+	}
+}
+
 func TestUndecryptableCredentialIsReportedNotRetried(t *testing.T) {
 	m := NewManager(newBox(t), fastOptions)
 	t.Cleanup(m.Close)
@@ -244,7 +264,7 @@ func TestDoesNotFollowRedirectsWithTheCredential(t *testing.T) {
 	}
 	m := NewManager(box, fastOptions)
 	t.Cleanup(m.Close)
-	m.Reconcile(t.Context(), []Config{{Slug: "woo", URL: redirector.URL + "/mcp", AuthType: AuthBearer, CredentialEnc: sealed}})
+	m.Reconcile(t.Context(), []Config{{Slug: "woo", URL: redirector.URL + "/mcp", AuthType: AuthBearer, CredentialEnc: sealed, Internal: true}})
 	waitFor(t, "unreachable", func() bool { return state(m, "woo").Status == Unreachable })
 
 	if got, _ := leaked.Load().(string); got != "" {
