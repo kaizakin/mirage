@@ -24,6 +24,8 @@ const (
 	Canceled Outcome = "canceled"
 	// RateLimited means the caller was over their limit, so the call was not made.
 	RateLimited Outcome = "rate_limited"
+	// Denied means the caller may not use the tool, or their permissions could not be read.
+	Denied Outcome = "denied"
 )
 
 // Entry is one tool call. UserID is 0 when the caller was not authenticated.

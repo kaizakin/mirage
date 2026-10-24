@@ -126,7 +126,7 @@ func run() error {
 		return err
 	}
 	measures := metrics.New(upstreams)
-	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: measures.Recorder(st), SessionID: sessionID, Limiter: limiter})
+	endpoint = downstream.New(upstreams, downstream.Options{Version: version, Audit: measures.Recorder(st), SessionID: sessionID, Limiter: limiter, Policy: st})
 
 	issuer, err := auth.NewTokenIssuer()
 	if err != nil {

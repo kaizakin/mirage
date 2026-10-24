@@ -139,7 +139,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum(rate(mirage_tool_calls_total{server=~\"$server\",outcome!=\"ok\"}[5m])) or vector(0)) / clamp_min(sum(rate(mirage_tool_calls_total{server=~\"$server\"}[5m])), 1e-9)",
+          "expr": "(sum(rate(mirage_tool_calls_total{server=~\"$server\",outcome!~\"ok|rate_limited|denied\"}[5m])) or vector(0)) / clamp_min(sum(rate(mirage_tool_calls_total{server=~\"$server\"}[5m])), 1e-9)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -508,7 +508,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\",outcome!=\"ok\"}[5m])) or 0 * sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\"}[5m]))) / clamp_min(sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\"}[5m])), 1e-9)",
+          "expr": "(sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\",outcome!~\"ok|rate_limited|denied\"}[5m])) or 0 * sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\"}[5m]))) / clamp_min(sum by (server) (rate(mirage_tool_calls_total{server=~\"$server\"}[5m])), 1e-9)",
           "legendFormat": "{{server}}",
           "refId": "A"
         }

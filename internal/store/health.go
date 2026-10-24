@@ -9,7 +9,7 @@ import (
 type ServerCalls struct {
 	Server      string
 	Calls       int
-	Failed      int // any outcome but ok
+	Failed      int // calls the server failed; the gateway's own refusals are not its failures
 	P50, P95    time.Duration
 	LastError   string
 	LastErrorAt *time.Time
@@ -20,14 +20,14 @@ type ServerCalls struct {
 // many failed, latency percentiles, and the latest failure's reason.
 func (s *Store) CallsSince(ctx context.Context, since time.Time) ([]ServerCalls, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.server_slug, count(*), count(*) FILTER (WHERE a.outcome <> 'ok'),
+		SELECT a.server_slug, count(*), count(*) FILTER (WHERE a.outcome NOT IN ('ok', 'rate_limited', 'denied')),
 			percentile_cont(0.5) WITHIN GROUP (ORDER BY a.duration_ms),
 			percentile_cont(0.95) WITHIN GROUP (ORDER BY a.duration_ms),
 			last.error, last.started_at, last.outcome
 		FROM audit_log a
 		LEFT JOIN LATERAL (
 			SELECT coalesce(f.error, f.outcome) AS error, f.started_at, f.outcome FROM audit_log f
-			WHERE f.server_slug = a.server_slug AND f.outcome <> 'ok' AND f.started_at >= $1
+			WHERE f.server_slug = a.server_slug AND f.outcome NOT IN ('ok', 'rate_limited', 'denied') AND f.started_at >= $1
 			ORDER BY f.id DESC LIMIT 1
 		) last ON true
 		WHERE a.started_at >= $1

@@ -1,5 +1,5 @@
 // Package api is the dashboard's REST API under /api: cookie-session login, servers,
-// members and invites, API keys, and the audit log.
+// members and invites, tool rules, API keys, and the audit log.
 //
 // Sessions follow the OWASP Session Management guidance: a random 256-bit token in an
 // HttpOnly, SameSite=Lax cookie, stored only as a hash, with absolute and idle expiry, and
@@ -105,6 +105,9 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/servers", admin(a.createServer))
 	mux.Handle("PATCH /api/servers/{slug}", admin(a.updateServer))
 	mux.Handle("DELETE /api/servers/{slug}", admin(a.deleteServer))
+	mux.Handle("GET /api/tool-rules", admin(a.listToolRules))
+	mux.Handle("POST /api/tool-rules", admin(a.createToolRule))
+	mux.Handle("DELETE /api/tool-rules/{id}", admin(a.deleteToolRule))
 	mux.Handle("GET /api/members", admin(a.listMembers))
 	mux.Handle("PATCH /api/members/{id}", admin(a.updateMember))
 	mux.Handle("DELETE /api/members/{id}", admin(a.deleteMember))

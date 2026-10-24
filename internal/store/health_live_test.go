@@ -17,6 +17,7 @@ func TestLiveCallsSinceSummarizesEachServer(t *testing.T) {
 		{UserID: ada.ID, ServerSlug: "currency", Tool: "slow_echo", StartedAt: now.Add(-1 * time.Minute), Duration: 20 * time.Second, Outcome: audit.Timeout, Error: "upstream currency did not answer slow_echo within 20s"},
 		{UserID: ada.ID, ServerSlug: "store-tea", Tool: "list_orders", StartedAt: now.Add(-1 * time.Minute), Duration: 5 * time.Millisecond, Outcome: audit.OK},
 		{UserID: ada.ID, ServerSlug: "store-tea", Tool: "list_orders", StartedAt: now.Add(-2 * time.Hour), Outcome: audit.Unreachable, Error: "old"},
+		{UserID: ada.ID, ServerSlug: "store-tea", Tool: "create_product", StartedAt: now.Add(-1 * time.Minute), Outcome: audit.Denied, Error: "not permitted"},
 	} {
 		if err := s.RecordCall(t.Context(), e); err != nil {
 			t.Fatal(err)
@@ -34,7 +35,7 @@ func TestLiveCallsSinceSummarizesEachServer(t *testing.T) {
 		cur.LastOutcome != "timeout" || cur.LastError != "upstream currency did not answer slow_echo within 20s" || cur.LastErrorAt == nil {
 		t.Fatalf("currency = %+v", cur)
 	}
-	if tea.Server != "store-tea" || tea.Calls != 1 || tea.Failed != 0 || tea.LastError != "" {
-		t.Fatalf("store-tea = %+v; the failure outside the window must not count", tea)
+	if tea.Server != "store-tea" || tea.Calls != 2 || tea.Failed != 0 || tea.LastError != "" {
+		t.Fatalf("store-tea = %+v; neither the failure outside the window nor the gateway's refusal is the server's failure", tea)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/kaizakin/mirage/internal/auth"
 	"github.com/kaizakin/mirage/internal/gateway/audit"
 	"github.com/kaizakin/mirage/internal/gateway/naming"
+	"github.com/kaizakin/mirage/internal/gateway/policy"
 	"github.com/kaizakin/mirage/internal/gateway/upstream"
 )
 
@@ -39,6 +40,8 @@ type Options struct {
 	SessionID func() string
 	// Limiter caps each user's tool calls; nil means no limit.
 	Limiter Limiter
+	// Policy holds the rules for which tools each member may use; nil allows every tool.
+	Policy policy.Source
 }
 
 // Limiter decides whether a user may make another call now. A Limiter error lets the call
@@ -54,6 +57,7 @@ type Server struct {
 	audit       audit.Recorder
 	callTimeout time.Duration
 	limiter     Limiter
+	policy      policy.Source
 	server      *mcp.Server
 
 	mu         sync.Mutex // serializes Sync
@@ -67,6 +71,7 @@ func New(upstreams Upstreams, opts Options) *Server {
 		audit:       opts.Audit,
 		callTimeout: opts.CallTimeout,
 		limiter:     opts.Limiter,
+		policy:      opts.Policy,
 		registered:  map[string]*mcp.Tool{},
 	}
 	if s.callTimeout <= 0 {
@@ -78,6 +83,7 @@ func New(upstreams Upstreams, opts Options) *Server {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{ListChanged: true}},
 		GetSessionID: opts.SessionID,
 	})
+	s.server.AddReceivingMiddleware(s.hideDenied)
 	return s
 }
 
@@ -161,17 +167,24 @@ func (s *Server) register(t *mcp.Tool) (err error) {
 func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	slug, tool, _ := naming.Decode(req.Params.Name)
 	entry := audit.Entry{ServerSlug: slug, Tool: tool, StartedAt: time.Now()}
-	// Extra is set only by HTTP transports; in-process callers have none.
-	if req.Extra != nil {
-		if u, ok := auth.UserFromTokenInfo(req.Extra.TokenInfo); ok {
-			entry.UserID = u.ID
-		}
-	}
+	user, _ := caller(req.Extra)
+	entry.UserID = user.ID
 	defer func() {
 		entry.Duration = time.Since(entry.StartedAt)
 		s.record(ctx, entry)
 	}()
 
+	p, err := s.policyFor(ctx, req.Extra)
+	if err != nil {
+		msg := "could not check your tool permissions; try again"
+		entry.Outcome, entry.Error = audit.Denied, msg
+		return errorResult(msg), nil
+	}
+	if !p.Allows(slug, tool) {
+		msg := fmt.Sprintf("%s is not permitted for your account; ask an admin for access", req.Params.Name)
+		entry.Outcome, entry.Error = audit.Denied, msg
+		return errorResult(msg), nil
+	}
 	if msg, limited := s.overLimit(ctx, entry.UserID); limited {
 		entry.Outcome, entry.Error = audit.RateLimited, msg
 		return errorResult(msg), nil
@@ -183,6 +196,53 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 		return nil, ctx.Err()
 	}
 	return res, nil
+}
+
+// hideDenied removes from tools/list the tools the caller may not use. Calls are checked
+// again in callTool, so a client that guesses a hidden name is still refused.
+func (s *Server) hideDenied(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		res, err := next(ctx, method, req)
+		list, ok := res.(*mcp.ListToolsResult)
+		if err != nil || !ok {
+			return res, err
+		}
+		p, err := s.policyFor(ctx, req.GetExtra())
+		if err != nil {
+			return nil, fmt.Errorf("checking tool permissions: %w", err)
+		}
+		visible := make([]*mcp.Tool, 0, len(list.Tools))
+		for _, t := range list.Tools {
+			if slug, tool, _ := naming.Decode(t.Name); p.Allows(slug, tool) {
+				visible = append(visible, t)
+			}
+		}
+		filtered := *list
+		filtered.Tools = visible
+		return &filtered, nil
+	}
+}
+
+// policyFor returns the caller's tool policy. A request with no user comes from an
+// in-process transport, never from a client, since HTTP requires a token.
+func (s *Server) policyFor(ctx context.Context, extra *mcp.RequestExtra) (policy.Policy, error) {
+	u, ok := caller(extra)
+	if s.policy == nil || !ok {
+		return policy.AllowAll, nil
+	}
+	p, err := policy.For(ctx, s.policy, u)
+	if err != nil {
+		slog.ErrorContext(ctx, "reading tool rules", "user", u.ID, "err", err)
+	}
+	return p, err
+}
+
+// caller is the authenticated user of a request. Extra is set only by HTTP transports.
+func caller(extra *mcp.RequestExtra) (auth.User, bool) {
+	if extra == nil {
+		return auth.User{}, false
+	}
+	return auth.UserFromTokenInfo(extra.TokenInfo)
 }
 
 // route makes the upstream call and classifies how it ended. Every failure becomes an
