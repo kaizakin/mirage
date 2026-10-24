@@ -205,7 +205,7 @@ func syncServers(ctx context.Context, st *store.Store, upstreams *upstream.Manag
 			configs := make([]upstream.Config, len(servers))
 			for i, s := range servers {
 				configs[i] = upstream.Config{Slug: s.Slug, URL: s.URL, AuthType: upstream.AuthType(s.AuthType),
-					AuthHeader: s.AuthHeader, CredentialEnc: s.CredentialEnc}
+					AuthHeader: s.AuthHeader, CredentialEnc: s.CredentialEnc, Internal: s.Internal}
 			}
 			upstreams.Reconcile(ctx, configs)
 		}

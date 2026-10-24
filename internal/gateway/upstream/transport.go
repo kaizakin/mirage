@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/kaizakin/mirage/internal/gateway/ssrf"
 	"github.com/kaizakin/mirage/internal/secretbox"
 )
 
@@ -29,8 +30,15 @@ func (t *credentialTransport) RoundTrip(req *http.Request) (*http.Response, erro
 // It never follows redirects. Go strips Authorization on a cross-host redirect, but
 // credentialTransport would add the header back on the next hop and hand the credential,
 // and the replayed request body, to wherever the upstream points.
+//
+// An upstream the platform did not create may only reach public addresses. Proxies are off
+// for it too: a proxy would make the connection on the gateway's behalf, out of the dialer's sight.
 func httpClient(cfg Config, box *secretbox.Box) (*http.Client, error) {
 	base := http.DefaultTransport.(*http.Transport).Clone()
+	if !cfg.Internal {
+		base.Proxy = nil
+		base.DialContext = ssrf.Dialer().DialContext
+	}
 	noRedirects := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	if cfg.AuthType == AuthNone {
 		return &http.Client{Transport: base, CheckRedirect: noRedirects}, nil
