@@ -7,6 +7,7 @@ import { AuditPage } from "./pages/Audit";
 import { AuthorizePage } from "./pages/Authorize";
 import { ChatPage } from "./pages/Chat";
 import { HealthPage } from "./pages/Health";
+import { PermissionsPage } from "./pages/Permissions";
 import { KeysPage } from "./pages/Keys";
 import { LoginPage } from "./pages/Login";
 import { MembersPage } from "./pages/Members";
@@ -66,6 +67,14 @@ export function App() {
           element={
             <RequireAdmin>
               <MembersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="permissions"
+          element={
+            <RequireAdmin>
+              <PermissionsPage />
             </RequireAdmin>
           }
         />

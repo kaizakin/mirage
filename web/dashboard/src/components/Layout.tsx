@@ -9,6 +9,7 @@ const pages: readonly { to: string; label: string; icon: IconName; adminOnly: bo
   { to: "/health", label: "Health", icon: "pulse", adminOnly: true },
   { to: "/stores", label: "Stores", icon: "store", adminOnly: false },
   { to: "/members", label: "Members", icon: "members", adminOnly: true },
+  { to: "/permissions", label: "Permissions", icon: "lock", adminOnly: true },
   { to: "/keys", label: "API keys", icon: "key", adminOnly: false },
   { to: "/audit", label: "Audit log", icon: "audit", adminOnly: false },
   { to: "/chat", label: "Chat", icon: "chat", adminOnly: false },

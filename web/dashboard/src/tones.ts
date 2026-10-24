@@ -15,4 +15,5 @@ export const outcomeStyle: Record<Outcome, { label: string; tone: Tone }> = {
   unreachable: { label: "Unreachable", tone: "red" },
   canceled: { label: "Canceled", tone: "grey" },
   rate_limited: { label: "Rate limited", tone: "amber" },
+  denied: { label: "Denied", tone: "grey" },
 };

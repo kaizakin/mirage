@@ -111,9 +111,22 @@ export interface ConnectedApp {
   last_used_at?: string;
 }
 
-export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "canceled" | "rate_limited";
+export type Outcome = "ok" | "tool_error" | "timeout" | "unreachable" | "canceled" | "rate_limited" | "denied";
 
-export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled", "rate_limited"];
+export const outcomes: readonly Outcome[] = ["ok", "tool_error", "timeout", "unreachable", "canceled", "rate_limited", "denied"];
+
+/** A tool rule. user_id 0 covers every member; an empty server or tool covers every server or tool. */
+export interface ToolRule {
+  id: number;
+  user_id: number;
+  user_email?: string;
+  server: string;
+  tool: string;
+  allow: boolean;
+  created_at: string;
+}
+
+export type NewToolRule = Pick<ToolRule, "user_id" | "server" | "tool" | "allow">;
 
 /** "removed" is a deleted server that still has calls in the health window. */
 export type HealthStatus = ServerStatus | "removed";

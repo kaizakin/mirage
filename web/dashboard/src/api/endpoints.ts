@@ -19,6 +19,8 @@ import type {
   Server,
   ServerPatch,
   Store,
+  ToolRule,
+  NewToolRule,
   User,
 } from "./types";
 
@@ -49,6 +51,10 @@ export const api = {
   members: () => json<Member[]>("GET", "/api/members"),
   setMemberRole: (id: number, role: Role) => call("PATCH", `/api/members/${id}`, { role }),
   removeMember: (id: number) => call("DELETE", `/api/members/${id}`),
+
+  toolRules: () => json<ToolRule[]>("GET", "/api/tool-rules"),
+  createToolRule: (rule: NewToolRule) => call("POST", "/api/tool-rules", rule),
+  deleteToolRule: (id: number) => call("DELETE", `/api/tool-rules/${id}`),
 
   invites: () => json<Invite[]>("GET", "/api/invites"),
   createInvite: (email: string, role: Role) => json<CreatedInvite>("POST", "/api/invites", { email, role }),
