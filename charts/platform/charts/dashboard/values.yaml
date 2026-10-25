@@ -10,6 +10,10 @@ ingress:
   className: traefik
   # /api on this host routes to the gateway (see the gateway chart).
   host: dash.127.0.0.1.nip.io
+  # HTTPS through cert-manager: clusterIssuer signs a certificate for the host.
+  tls:
+    enabled: false
+    clusterIssuer: ""
 
 resources:
   requests:

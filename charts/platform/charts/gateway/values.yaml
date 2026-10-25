@@ -11,6 +11,10 @@ ingress:
   host: gateway.127.0.0.1.nip.io
   # The dashboard's host; its /api path routes here.
   dashboardHost: dash.127.0.0.1.nip.io
+  # HTTPS through cert-manager: clusterIssuer signs a certificate for both hosts.
+  tls:
+    enabled: false
+    clusterIssuer: ""
 
 # The chat agent's model provider: groq or gemini. Each reads its key from a Secret you
 # create; without the chosen provider's key, chat answers 503.

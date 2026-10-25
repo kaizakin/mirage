@@ -1,4 +1,5 @@
 {{- if .Values.wordpress.ingress.enabled }}
+{{- $host := .Values.wordpress.ingress.host | default "shop.127.0.0.1.nip.io" }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,12 +7,21 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "wordpress.labels" . | nindent 4 }}
+  {{- if .Values.wordpress.ingress.tls.enabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.wordpress.ingress.tls.clusterIssuer | quote }}
+  {{- end }}
 spec:
   {{- if .Values.wordpress.ingress.className }}
   ingressClassName: {{ .Values.wordpress.ingress.className }}
   {{- end }}
+  {{- if .Values.wordpress.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ include "wordpress.fullname" . }}-tls
+  {{- end }}
   rules:
-    - host: {{ .Values.wordpress.ingress.host | default "shop.127.0.0.1.nip.io" }}
+    - host: {{ $host }}
       http:
         paths:
           - path: /

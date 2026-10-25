@@ -5,8 +5,19 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway.labels" . | nindent 4 }}
+  {{- if .Values.ingress.tls.enabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  {{- /* A Secret per Ingress: cert-manager names the Certificate after it, and two Ingresses
+  naming the same Secret would contend for one Certificate. */}}
+  tls:
+    - hosts: {{ list .Values.ingress.host .Values.ingress.dashboardHost | uniq | toJson }}
+      secretName: {{ include "gateway.fullname" . }}-tls
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host }}
       http:

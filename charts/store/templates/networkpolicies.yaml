@@ -129,3 +129,28 @@ spec:
   # other stores' own ingress rules keep it out of their data.
   egress:
     - {}
+{{- if .Values.shop.wordpress.ingress.tls.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acme-solver
+  namespace: {{ .Release.Namespace }}
+spec:
+  # cert-manager answers Let's Encrypt's HTTP-01 challenge from a pod it starts in this
+  # namespace, behind the ingress controller; default-deny would otherwise drop the check.
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - {port: 8089, protocol: TCP}
+{{- end }}

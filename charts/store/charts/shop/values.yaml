@@ -11,6 +11,10 @@ wordpress:
     enabled: true
     className: traefik
     host: shop.127.0.0.1.nip.io
+    # HTTPS through cert-manager: clusterIssuer signs a certificate for the host.
+    tls:
+      enabled: false
+      clusterIssuer: ""
   persistence:
     enabled: true
     storageClass: ""
