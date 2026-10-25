@@ -1,0 +1,133 @@
+# Production override for a single k3s node (4 GB RAM) under the domain mirage.kaizakin.site.
+# Layered over values.yaml:
+#   helm upgrade --install mirage charts/platform -n mirage -f charts/platform/values-prod.yaml
+# deploy/vps/README.md is the runbook and lists every value that differs from the local cluster.
+#
+# Hosts. The dashboard (and its /api) is mirage.kaizakin.site; the MCP endpoint and OAuth live on
+# mcp.mirage.kaizakin.site. They cannot share one host: the dashboard's consent page is
+# /oauth/authorize, and the gateway's ingress claims the /oauth prefix.
+#
+# Images come from ghcr.io (make push-images REGISTRY=ghcr.io/kaizakin TAG=...). Every tag
+# below is the same release; change them together.
+
+gateway:
+  image:
+    repository: ghcr.io/kaizakin/mirage-gateway
+    tag: &tag "0.1.0"
+    pullPolicy: IfNotPresent
+  ingress:
+    host: mcp.mirage.kaizakin.site
+    dashboardHost: mirage.kaizakin.site
+    tls:
+      enabled: true
+      clusterIssuer: letsencrypt
+  scheme: https
+  secureCookies: true
+  # Empty: the chart generates one into the mirage-gateway Secret (see the runbook).
+  admin:
+    password: ""
+  stores:
+    domain: shop.mirage.kaizakin.site
+    scheme: https
+    maxPerUser: 1
+  # About 10 MiB each at rest; two keep /mcp up through a rollout.
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 500m
+      memory: 192Mi
+
+dashboard:
+  image:
+    repository: ghcr.io/kaizakin/mirage-dashboard
+    tag: *tag
+    pullPolicy: IfNotPresent
+  ingress:
+    host: mirage.kaizakin.site
+    tls:
+      enabled: true
+      clusterIssuer: letsencrypt
+
+currency-mcp:
+  image:
+    repository: ghcr.io/kaizakin/mirage-currency-mcp
+    tag: *tag
+    pullPolicy: IfNotPresent
+
+postgres:
+  persistence:
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+provisioner:
+  image:
+    repository: ghcr.io/kaizakin/mirage-provisioner
+    tag: *tag
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 25m
+      memory: 48Mi
+    limits:
+      cpu: 500m
+      memory: 192Mi
+  stores:
+    scheme: https
+    # Every new store is installed with these, beneath its own host, title, and secrets.
+    values:
+      # One store requests about 0.6 GiB and is limited to about 1.8 GiB with its setup Job.
+      quota:
+        requests.cpu: 500m
+        requests.memory: 768Mi
+        limits.cpu: "4"
+        limits.memory: 2Gi
+        requests.storage: 6Gi
+        persistentvolumeclaims: "3"
+        pods: "6"
+        services: "6"
+      shop:
+        setup:
+          wpCliImage: ghcr.io/kaizakin/mirage-shop-setup:0.1.0
+        wordpress:
+          ingress:
+            tls:
+              enabled: true
+              clusterIssuer: letsencrypt
+          persistence:
+            size: 2Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+        mysql:
+          # MySQL 8 starts with a 128 MiB buffer pool and a performance schema that holds a
+          # large share of its memory at rest; a demo catalog needs neither.
+          args:
+            - --innodb-buffer-pool-size=64M
+            - --performance-schema=OFF
+          persistence:
+            size: 2Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      woo-mcp:
+        image:
+          repository: ghcr.io/kaizakin/mirage-woo-mcp
+          tag: *tag
+          pullPolicy: IfNotPresent
