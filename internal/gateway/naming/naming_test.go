@@ -55,7 +55,7 @@ func TestValidateSlug(t *testing.T) {
 			t.Errorf("ValidateSlug(%q): %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "-woo", "woo-", "deep--wiki", "woo_mcp", "WOO", strings.Repeat("a", 33)} {
+	for _, bad := range []string{"", "-woo", "woo-", "deep--wiki", "woo_mcp", "WOO", "mirage", strings.Repeat("a", 33)} {
 		if ValidateSlug(bad) == nil {
 			t.Errorf("ValidateSlug(%q) accepted it", bad)
 		}

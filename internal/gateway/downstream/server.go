@@ -83,7 +83,8 @@ func New(upstreams Upstreams, opts Options) *Server {
 		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{ListChanged: true}},
 		GetSessionID: opts.SessionID,
 	})
-	s.server.AddReceivingMiddleware(s.hideDenied)
+	s.addMetaTools()
+	s.server.AddReceivingMiddleware(s.listFor)
 	return s
 }
 
@@ -198,9 +199,10 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 	return res, nil
 }
 
-// hideDenied removes from tools/list the tools the caller may not use. Calls are checked
-// again in callTool, so a client that guesses a hidden name is still refused.
-func (s *Server) hideDenied(next mcp.MethodHandler) mcp.MethodHandler {
+// listFor shapes tools/list for the caller: in search mode only the gateway's own tools,
+// otherwise every upstream tool the caller may use. Calls are checked again in callTool, so a
+// client that guesses a hidden name is still refused.
+func (s *Server) listFor(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		res, err := next(ctx, method, req)
 		list, ok := res.(*mcp.ListToolsResult)
@@ -211,9 +213,11 @@ func (s *Server) hideDenied(next mcp.MethodHandler) mcp.MethodHandler {
 		if err != nil {
 			return nil, fmt.Errorf("checking tool permissions: %w", err)
 		}
+		search := searchModeRequested(req.GetExtra())
 		visible := make([]*mcp.Tool, 0, len(list.Tools))
 		for _, t := range list.Tools {
-			if slug, tool, _ := naming.Decode(t.Name); p.Allows(slug, tool) {
+			slug, tool, upstream := naming.Decode(t.Name)
+			if upstream && !search && p.Allows(slug, tool) || !upstream && search {
 				visible = append(visible, t)
 			}
 		}

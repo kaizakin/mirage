@@ -28,17 +28,23 @@ func (k oneKey) APIKeyByID(_ context.Context, id string) (auth.KeyRecord, error)
 	return k.rec, nil
 }
 
-type bearer struct{ key string }
+type bearer struct {
+	key    string
+	header http.Header
+}
 
 func (b bearer) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+b.key)
+	for k, v := range b.header {
+		req.Header[k] = v
+	}
 	return http.DefaultTransport.RoundTrip(req)
 }
 
 // connectAs serves the gateway behind the real bearer middleware and returns an MCP client
-// session authenticated as user 42 with the given role.
-func connectAs(t *testing.T, h *harness, role string) *mcp.ClientSession {
+// session authenticated as user 42 with the given role, sending header on every request.
+func connectAs(t *testing.T, h *harness, role string, header ...string) *mcp.ClientSession {
 	t.Helper()
 	key, err := auth.GenerateKey()
 	if err != nil {
@@ -50,7 +56,7 @@ func connectAs(t *testing.T, h *harness, role string) *mcp.ClientSession {
 	t.Cleanup(srv.Close)
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "claude"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{
 		Endpoint:   srv.URL,
-		HTTPClient: &http.Client{Transport: bearer{key.Plaintext}},
+		HTTPClient: &http.Client{Transport: bearer{key: key.Plaintext, header: headerOf(header...)}},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -153,4 +159,12 @@ func TestDeniedToolsAreHiddenFromMembersAndRefusedWhenCalled(t *testing.T) {
 	if got := listedNames(t, admin); len(got) != 4 {
 		t.Fatalf("an admin lists %v, want all 4 tools", got)
 	}
+}
+
+func headerOf(kv ...string) http.Header {
+	h := http.Header{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		h.Set(kv[i], kv[i+1])
+	}
+	return h
 }

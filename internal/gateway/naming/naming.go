@@ -13,6 +13,9 @@ import (
 // Separator joins a server's slug and its tool name.
 const Separator = "__"
 
+// Gateway is the slug of the gateway's own tools, so no server may take it.
+const Gateway = "mirage"
+
 // maxNameLen is the longest tool name clients accept; the Claude API caps tool names at 64.
 const maxNameLen = 64
 
@@ -22,10 +25,13 @@ var (
 )
 
 // ValidateSlug reports whether slug can name a server: lowercase letters, digits, and
-// single hyphens between them, at most 32 characters.
+// single hyphens between them, at most 32 characters, other than Gateway.
 func ValidateSlug(slug string) error {
 	if len(slug) > 32 || !slugPattern.MatchString(slug) {
 		return fmt.Errorf("server slug %q must be 1-32 lowercase letters, digits, or single hyphens", slug)
+	}
+	if slug == Gateway {
+		return fmt.Errorf("server slug %q is reserved for the gateway's own tools", slug)
 	}
 	return nil
 }
