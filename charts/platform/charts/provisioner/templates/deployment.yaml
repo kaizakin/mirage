@@ -56,6 +56,10 @@ spec:
               value: {{ .Release.Namespace | quote }}
             - name: PROVISION_TIMEOUT
               value: {{ .Values.timeout | quote }}
+            - name: STORE_SCHEME
+              value: {{ .Values.stores.scheme | quote }}
+            - name: STORE_VALUES
+              value: {{ .Values.stores.values | toJson | quote }}
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true

@@ -8,6 +8,15 @@ imageId: ""
 # How long a store may take to become ready before it fails with the reason.
 timeout: 10m
 
+stores:
+  # Scheme of the stores' public URLs; https needs TLS on their ingresses (values below).
+  # It must match gateway.stores.scheme.
+  scheme: http
+  # Values of the store chart (charts/store) every new store is installed with, beneath the
+  # ones the provisioner sets per store: TLS, images, a resource profile. Stores that exist
+  # keep theirs until deploy/upgrade-stores.sh upgrades them.
+  values: {}
+
 resources:
   requests:
     cpu: 50m

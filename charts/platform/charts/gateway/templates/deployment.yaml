@@ -95,6 +95,8 @@ spec:
               value: "{{ .Values.scheme }}://{{ .Values.ingress.dashboardHost }}"
             - name: STORE_DOMAIN
               value: {{ .Values.stores.domain | quote }}
+            - name: STORE_SCHEME
+              value: {{ .Values.stores.scheme | quote }}
             - name: MAX_STORES_PER_USER
               value: {{ .Values.stores.maxPerUser | quote }}
             - name: INSECURE_COOKIES

@@ -60,6 +60,8 @@ mysql:
     repository: mysql
     tag: "8.0"
     pullPolicy: IfNotPresent
+  # Extra mysqld flags, such as --innodb-buffer-pool-size=64M on a small node.
+  args: []
   database: app_db
   user: app_user
   password: "password"
