@@ -18,15 +18,20 @@ MONITORING_NAMESPACE ?= monitoring
 KUBE_PROMETHEUS_STACK_VERSION ?= 92.13.1
 # A provisioned store's slug, for the targets that test one store (test-live).
 STORE ?=
+# Where push-images sends the images, as REGISTRY/mirage-<name>:TAG.
+REGISTRY ?=
+TAG ?=
 export NAMESPACE RELEASE_NAME LIVE_PORT STORE_PORT STORE
 
-.PHONY: help build lint images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e monitoring
+.PHONY: help build lint build-images images push-images helm-install helm-upgrade helm-uninstall clean-state status test-live test-store e2e monitoring
 
 help:
 	@echo "Usage:"
 	@echo "  make build           Compile every Go package"
 	@echo "  make lint            gofmt, go vet, staticcheck, and revive over the Go code"
-	@echo "  make images          Build the $(BUILD_IMAGES) and dashboard images and import them into k3d cluster $(K3D_CLUSTER)"
+	@echo "  make build-images    Build the $(BUILD_IMAGES) and dashboard images as mirage/<name>:$(IMAGE_TAG)"
+	@echo "  make images          Build the images and import them into k3d cluster $(K3D_CLUSTER)"
+	@echo "  make push-images     Build the images and push them as REGISTRY/mirage-<name>:TAG"
 	@echo "  make helm-install    Build images and install the platform chart (release: $(RELEASE_NAME), ns: $(NAMESPACE))"
 	@echo "  make helm-upgrade    Build images and upgrade or install the platform chart"
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and every provisioned store"
@@ -47,11 +52,24 @@ lint:
 	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks all ./...
 	go run github.com/mgechev/revive@v1.17.1 -formatter plain -set_exit_status -exclude ./web/... ./...
 
-images:
+build-images:
 	for s in $(BUILD_IMAGES); do docker build -f build/$$s.Dockerfile -t mirage/$$s:$(IMAGE_TAG) .; done
 	docker build -t mirage/dashboard:$(IMAGE_TAG) web/dashboard
+
+images: build-images
 # One image per import: k3d reported success importing several at once yet dropped one.
 	for s in $(BUILD_IMAGES) dashboard; do k3d image import mirage/$$s:$(IMAGE_TAG) -c $(K3D_CLUSTER); done
+
+# For a cluster that pulls from a registry, such as the VPS (deploy/vps/README.md):
+#   make push-images REGISTRY=ghcr.io/<owner> TAG=0.1.0
+# Give every release a new TAG: nodes keep pulled images by tag and would not fetch a reused one.
+push-images:
+	test -n "$(REGISTRY)" && test -n "$(TAG)" || { echo "usage: make push-images REGISTRY=ghcr.io/<owner> TAG=<version>" >&2; exit 1; }
+	$(MAKE) build-images
+	for s in $(BUILD_IMAGES) dashboard; do \
+		docker tag mirage/$$s:$(IMAGE_TAG) $(REGISTRY)/mirage-$$s:$(TAG); \
+		docker push $(REGISTRY)/mirage-$$s:$(TAG); \
+	done
 
 # A changed image ID rolls the pod even though the tag stays the same. Stores' woo-mcp pods
 # take the image as it is when the store is provisioned.

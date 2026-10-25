@@ -1,0 +1,34 @@
+# Production override for kube-prometheus-stack on the 4 GB VPS, layered over values.yaml.
+# See deploy/vps/README.md for the install command and the Secret it expects.
+
+prometheus:
+  prometheusSpec:
+    retention: 1d
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 640Mi
+
+grafana:
+  # The chart's default admin password is public knowledge; this Secret replaces it.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  ingress:
+    hosts:
+      - grafana.mirage.kaizakin.site
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.mirage.kaizakin.site
+  resources:
+    requests:
+      cpu: 25m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
