@@ -17,6 +17,8 @@ type ShopOptions struct {
 	Domain string
 	// MaxPerUser caps the stores one user may have at once.
 	MaxPerUser int
+	// Scheme of the stores' public URLs, http or https.
+	Scheme string
 }
 
 // shopSlug matches the database's shops_slug_format check; a store's namespace, host label,
@@ -37,8 +39,8 @@ type shopJSON struct {
 	ReadyAt    *time.Time `json:"ready_at,omitempty"`
 }
 
-func toShopJSON(s store.Shop) shopJSON {
-	return shopJSON{Slug: s.Slug, Name: s.Name, Status: string(s.Status), Reason: s.Reason, URL: "http://" + s.Host,
+func (a *API) toShopJSON(s store.Shop) shopJSON {
+	return shopJSON{Slug: s.Slug, Name: s.Name, Status: string(s.Status), Reason: s.Reason, URL: a.Shops.Scheme + "://" + s.Host,
 		Server: s.ServerSlug(), OwnerEmail: s.OwnerEmail, CreatedAt: s.CreatedAt, ReadyAt: s.ReadyAt}
 }
 
@@ -56,7 +58,7 @@ func (a *API) listShops(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]shopJSON, 0, len(shops))
 	for _, s := range shops {
-		out = append(out, toShopJSON(s))
+		out = append(out, a.toShopJSON(s))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -100,7 +102,7 @@ func (a *API) createShop(w http.ResponseWriter, r *http.Request) {
 	if created {
 		status = http.StatusCreated
 	}
-	writeJSON(w, status, toShopJSON(shop))
+	writeJSON(w, status, a.toShopJSON(shop))
 }
 
 // deleteShop asks for a store's teardown. Only its owner or an admin may; anyone else is

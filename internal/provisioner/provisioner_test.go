@@ -246,6 +246,42 @@ func TestStoreIsInstalledThenRegisteredWhenHealthy(t *testing.T) {
 	}
 }
 
+func TestStoreValuesUnderlieEachStoresOwn(t *testing.T) {
+	db, cluster := newFakeShops(newShop(1, "tea"), newShop(2, "mugs")), newFakeCluster()
+	shared := map[string]any{
+		"quota": map[string]any{"requests.memory": "1Gi"},
+		"shop": map[string]any{
+			"setup":     map[string]any{"title": "Shared", "currency": "USD"},
+			"wordpress": map[string]any{"ingress": map[string]any{"tls": map[string]any{"enabled": true, "clusterIssuer": "letsencrypt"}}},
+		},
+	}
+	p := New(db, cluster, testBox(t), Config{Timeout: 10 * time.Minute, GatewayNamespace: "mirage", Scheme: "https", StoreValues: shared})
+
+	step(t, p, db, 1)
+	step(t, p, db, 2)
+	for ns, host := range map[string]string{"store-tea": "tea.shop.test", "store-mugs": "mugs.shop.test"} {
+		values := cluster.installed[ns]
+		checks := map[string][2]any{
+			"siteUrl":  {valueAt(values, "shop", "setup", "siteUrl"), "https://" + host},
+			"host":     {valueAt(values, "shop", "wordpress", "ingress", "host"), host},
+			"issuer":   {valueAt(values, "shop", "wordpress", "ingress", "tls", "clusterIssuer"), "letsencrypt"},
+			"currency": {valueAt(values, "shop", "setup", "currency"), "USD"},
+			"quota":    {valueAt(values, "quota", "requests.memory"), "1Gi"},
+		}
+		for name, c := range checks {
+			if c[0] != c[1] {
+				t.Errorf("%s: %s = %v, want %v", ns, name, c[0], c[1])
+			}
+		}
+		if valueAt(values, "shop", "setup", "title") == "Shared" {
+			t.Errorf("%s: the store's own title must win over the shared one", ns)
+		}
+	}
+	if _, leaked := valueAt(shared, "shop", "wordpress", "ingress").(map[string]any)["host"]; leaked {
+		t.Error("installing a store modified the shared values")
+	}
+}
+
 func TestReleaseLeftUnfinishedIsReinstalledWithTheSameSecrets(t *testing.T) {
 	p, db, cluster := setup(t, newShop(1, "tea"))
 	step(t, p, db, 1)

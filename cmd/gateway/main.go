@@ -22,7 +22,8 @@
 // sign in through a browser: the gateway is then an OAuth 2.1 authorization server, and /mcp
 // accepts its access tokens beside API keys.
 // Users create stores under /api/stores; STORE_DOMAIN (default shop.127.0.0.1.nip.io) is the
-// domain their hosts sit under, and MAX_STORES_PER_USER (default 3) caps each user's stores.
+// domain their hosts sit under, STORE_SCHEME (http or https, default http) the scheme of their
+// URLs, and MAX_STORES_PER_USER (default 3) caps each user's stores.
 // LLM_PROVIDER picks its model: groq (the default; GROQ_API_KEY, GROQ_MODEL) or gemini
 // (GEMINI_API_KEY, GEMINI_MODEL). Without the chosen provider's key, chat answers 503.
 //
@@ -372,9 +373,15 @@ func housekeeping(ctx context.Context, st *store.Store) error {
 	}
 }
 
-// shopOptions reads where provisioned stores are served and how many each user may have.
+// shopOptions reads where provisioned stores are served, over which scheme, and how many each
+// user may have.
 func shopOptions() (api.ShopOptions, error) {
 	opts := api.ShopOptions{Domain: cmp.Or(os.Getenv("STORE_DOMAIN"), "shop.127.0.0.1.nip.io"), MaxPerUser: 3}
+	scheme, err := platform.StoreScheme()
+	if err != nil {
+		return opts, err
+	}
+	opts.Scheme = scheme
 	if v := os.Getenv("MAX_STORES_PER_USER"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {

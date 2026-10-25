@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 
@@ -78,6 +79,11 @@ type Config struct {
 	Interval time.Duration
 	// Parallel caps the stores worked on at once; default 4.
 	Parallel int
+	// Scheme of the stores' public URLs, http or https; default http.
+	Scheme string
+	// StoreValues are chart values every store is installed with, such as TLS or a resource
+	// profile. The values the provisioner sets per store take precedence.
+	StoreValues map[string]any
 }
 
 // Provisioner reconciles stores.
@@ -100,6 +106,9 @@ func New(shops Shops, cluster Cluster, box *secretbox.Box, cfg Config) *Provisio
 	}
 	if cfg.Parallel <= 0 {
 		cfg.Parallel = 4
+	}
+	if cfg.Scheme == "" {
+		cfg.Scheme = "http"
 	}
 	return &Provisioner{shops: shops, cluster: cluster, box: box, cfg: cfg, now: time.Now,
 		busy: map[int64]bool{}, lastErr: map[int64]string{}}
@@ -341,11 +350,11 @@ func (p *Provisioner) server(shop store.Shop, secrets *shopSecrets) store.ShopSe
 }
 
 func (p *Provisioner) values(shop store.Shop, s *shopSecrets) map[string]any {
-	return map[string]any{
+	return mergeValues(p.cfg.StoreValues, map[string]any{
 		"gatewayNamespace": p.cfg.GatewayNamespace,
 		"shop": map[string]any{
 			"setup": map[string]any{
-				"siteUrl":       "http://" + shop.Host,
+				"siteUrl":       p.cfg.Scheme + "://" + shop.Host,
 				"title":         shop.Name,
 				"adminPassword": s.AdminPassword,
 			},
@@ -353,5 +362,23 @@ func (p *Provisioner) values(shop store.Shop, s *shopSecrets) map[string]any {
 			"mysql":     map[string]any{"password": s.MySQLPassword, "rootPassword": s.MySQLRootPassword},
 		},
 		"woo-mcp": map[string]any{"bearerToken": s.MCPToken, "gatewayNamespace": p.cfg.GatewayNamespace},
+	})
+}
+
+// mergeValues returns base with over laid on top, merging nested maps key by key. Neither
+// argument is modified.
+func mergeValues(base, over map[string]any) map[string]any {
+	out := maps.Clone(base)
+	if out == nil {
+		out = map[string]any{}
 	}
+	for k, v := range over {
+		if overMap, ok := v.(map[string]any); ok {
+			if baseMap, ok := out[k].(map[string]any); ok {
+				v = mergeValues(baseMap, overMap)
+			}
+		}
+		out[k] = v
+	}
+	return out
 }

@@ -5,11 +5,14 @@
 // It reads DATABASE_URL and SECRETBOX_KEY, both required and shared with the gateway;
 // STORE_CHART, the chart's directory (default /charts/store); GATEWAY_NAMESPACE, where the
 // gateway runs (default mirage); PROVISION_TIMEOUT, how long a store may take to become ready
-// before it fails (default 10m); and LISTEN_ADDR for its health endpoints (default :8080).
+// before it fails (default 10m); STORE_SCHEME, the scheme of the stores' public URLs (http or
+// https, default http); STORE_VALUES, a JSON object of chart values every store is installed
+// with, beneath the ones set per store; and LISTEN_ADDR for its health endpoints (default :8080).
 package main
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -45,6 +48,16 @@ func run() error {
 	if err != nil || timeout <= 0 {
 		return fmt.Errorf("PROVISION_TIMEOUT must be a positive duration such as 10m, got %q", os.Getenv("PROVISION_TIMEOUT"))
 	}
+	scheme, err := platform.StoreScheme()
+	if err != nil {
+		return err
+	}
+	var storeValues map[string]any
+	if v := os.Getenv("STORE_VALUES"); v != "" {
+		if err := json.Unmarshal([]byte(v), &storeValues); err != nil {
+			return fmt.Errorf("STORE_VALUES must be a JSON object: %w", err)
+		}
+	}
 	cluster, err := provisioner.NewKube(cmp.Or(os.Getenv("STORE_CHART"), "/charts/store"))
 	if err != nil {
 		return err
@@ -61,6 +74,8 @@ func run() error {
 	p := provisioner.New(store.New(db), cluster, box, provisioner.Config{
 		Timeout:          timeout,
 		GatewayNamespace: cmp.Or(os.Getenv("GATEWAY_NAMESPACE"), "mirage"),
+		Scheme:           scheme,
+		StoreValues:      storeValues,
 	})
 	mux := http.NewServeMux()
 	platform.RegisterHealth(mux, db.PingContext)
@@ -68,6 +83,6 @@ func run() error {
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return platform.Serve(ctx, cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux) })
 	g.Go(func() error { return p.Run(ctx) })
-	slog.Info("provisioning stores", "timeout", timeout)
+	slog.Info("provisioning stores", "timeout", timeout, "scheme", scheme)
 	return g.Wait()
 }

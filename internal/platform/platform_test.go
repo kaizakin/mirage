@@ -70,3 +70,16 @@ func TestRequireEnvReturnsValues(t *testing.T) {
 		t.Fatalf("values = %v", got)
 	}
 }
+
+func TestStoreScheme(t *testing.T) {
+	for in, want := range map[string]string{"": "http", "http": "http", "https": "https"} {
+		t.Setenv("STORE_SCHEME", in)
+		if got, err := StoreScheme(); err != nil || got != want {
+			t.Errorf("STORE_SCHEME=%q: got %q, %v; want %q", in, got, err, want)
+		}
+	}
+	t.Setenv("STORE_SCHEME", "HTTPS://")
+	if _, err := StoreScheme(); err == nil {
+		t.Error("an unknown scheme must be an error")
+	}
+}

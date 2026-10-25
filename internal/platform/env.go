@@ -25,3 +25,16 @@ func RequireEnv(names ...string) (map[string]string, error) {
 	}
 	return values, nil
 }
+
+// StoreScheme reads STORE_SCHEME, the scheme of provisioned stores' public URLs: http (the
+// default) or https.
+func StoreScheme() (string, error) {
+	switch v := os.Getenv("STORE_SCHEME"); v {
+	case "":
+		return "http", nil
+	case "http", "https":
+		return v, nil
+	default:
+		return "", fmt.Errorf("STORE_SCHEME must be http or https, got %q", v)
+	}
+}
