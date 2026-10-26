@@ -1,0 +1,24 @@
+# Set by the provisioner from the hosted server's row.
+image: ""
+port: 8080
+# The container's environment, kept in a Secret.
+env: {}
+# Where the gateway runs; only its pods may call the server.
+gatewayNamespace: mirage
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+quota:
+  requests.cpu: 200m
+  requests.memory: 256Mi
+  limits.cpu: "1"
+  limits.memory: 512Mi
+  pods: "3"
+  services: "1"
+  persistentvolumeclaims: "0"

@@ -1,0 +1,63 @@
+{{- /*
+Isolation. Only the gateway's pods may call the server. The server may resolve names and reach
+the public internet, which is what MCP servers that wrap an API need, but nothing inside the
+cluster or the cloud's metadata endpoint.
+*/ -}}
+{{- $internal := list "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "100.64.0.0/10" "169.254.0.0/16" "127.0.0.0/8" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hosted-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.gatewayNamespace }}
+          podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - {port: {{ .Values.port }}, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: {{ toJson $internal }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: hosted-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  hard:
+    {{- toYaml .Values.quota | nindent 4 }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: hosted-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  limits:
+    - type: Container
+      default:
+        {{- toYaml .Values.resources.limits | nindent 8 }}
+      defaultRequest:
+        {{- toYaml .Values.resources.requests | nindent 8 }}
+      max:
+        {{- toYaml .Values.resources.limits | nindent 8 }}

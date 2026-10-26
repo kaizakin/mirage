@@ -1,0 +1,5 @@
+apiVersion: v2
+name: hosted-mcp
+description: An MCP server the platform runs from a container image, with its guardrails. The provisioner installs it once per hosted server namespace.
+type: application
+version: 0.1.0

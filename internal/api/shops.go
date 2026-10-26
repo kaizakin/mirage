@@ -123,17 +123,17 @@ func (a *API) deleteShop(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// managedServer answers 409 and reports true when the server belongs to a store, whose
-// lifecycle manages it.
-func (a *API) managedServer(w http.ResponseWriter, r *http.Request, slug string) bool {
-	shop, err := a.Store.ServerShop(r.Context(), slug)
+// managedServer answers 409 and reports stop when the server belongs to a store, whose
+// lifecycle manages it. hosted reports whether the platform runs the server from an image.
+func (a *API) managedServer(w http.ResponseWriter, r *http.Request, slug string) (hosted, stop bool) {
+	shop, hosted, err := a.Store.ServerOwner(r.Context(), slug)
 	if err != nil {
 		storeError(w, r, err)
-		return true
+		return false, true
 	}
 	if shop != "" {
 		writeError(w, http.StatusConflict, "server "+slug+" belongs to store "+shop+"; manage it from the Stores page")
-		return true
+		return false, true
 	}
-	return false
+	return hosted, false
 }

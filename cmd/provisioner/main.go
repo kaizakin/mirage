@@ -1,9 +1,11 @@
 // Command provisioner turns the stores users ask for in the dashboard into running stores.
 // Each store is the store Helm chart installed in its own namespace; once it is up, its MCP
-// server is registered in the gateway. See internal/provisioner.
+// server is registered in the gateway. It also runs the MCP servers admins host from an
+// image, each the hosted-mcp chart in its own namespace. See internal/provisioner.
 //
 // It reads DATABASE_URL and SECRETBOX_KEY, both required and shared with the gateway;
-// STORE_CHART, the chart's directory (default /charts/store); GATEWAY_NAMESPACE, where the
+// STORE_CHART and HOSTED_CHART, the charts' directories (default /charts/store and
+// /charts/hosted-mcp); GATEWAY_NAMESPACE, where the
 // gateway runs (default mirage); PROVISION_TIMEOUT, how long a store may take to become ready
 // before it fails (default 10m); STORE_SCHEME, the scheme of the stores' public URLs (http or
 // https, default http); STORE_VALUES, a JSON object of chart values every store is installed
@@ -58,7 +60,7 @@ func run() error {
 			return fmt.Errorf("STORE_VALUES must be a JSON object: %w", err)
 		}
 	}
-	cluster, err := provisioner.NewKube(cmp.Or(os.Getenv("STORE_CHART"), "/charts/store"))
+	cluster, err := provisioner.NewKube(cmp.Or(os.Getenv("STORE_CHART"), "/charts/store"), cmp.Or(os.Getenv("HOSTED_CHART"), "/charts/hosted-mcp"))
 	if err != nil {
 		return err
 	}
@@ -77,12 +79,16 @@ func run() error {
 		Scheme:           scheme,
 		StoreValues:      storeValues,
 	})
+	hosting := provisioner.NewHosting(store.New(db), cluster, box, provisioner.HostingConfig{
+		GatewayNamespace: cmp.Or(os.Getenv("GATEWAY_NAMESPACE"), "mirage"),
+	})
 	mux := http.NewServeMux()
 	platform.RegisterHealth(mux, db.PingContext)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return platform.Serve(ctx, cmp.Or(os.Getenv("LISTEN_ADDR"), ":8080"), mux) })
 	g.Go(func() error { return p.Run(ctx) })
+	g.Go(func() error { return hosting.Run(ctx) })
 	slog.Info("provisioning stores", "timeout", timeout, "scheme", scheme)
 	return g.Wait()
 }

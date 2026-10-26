@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/kaizakin/mirage/internal/secretbox"
@@ -91,14 +92,26 @@ type ServerRow struct {
 	// Shop is the slug of the provisioned store that owns this server, or "". The store's
 	// lifecycle manages such a server, not the dashboard's server controls.
 	Shop string
+	// Hosted is set for a server the platform runs from an image.
+	Hosted *HostedState
+}
+
+// HostedState is a hosted server as the dashboard shows it.
+type HostedState struct {
+	Image  string
+	Port   int
+	Path   string
+	Status HostedStatus
+	Reason string
 }
 
 // Servers lists every server, enabled or not, ordered by slug.
 func (s *Store) Servers(ctx context.Context) ([]ServerRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.slug, s.url, s.enabled, s.auth_type, coalesce(s.auth_header, ''), s.credential_enc IS NOT NULL, s.created_at,
-			s.internal, coalesce(sh.slug, '')
-		FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id ORDER BY s.slug`)
+			s.internal, coalesce(sh.slug, ''), h.image, h.port, h.path, h.status, coalesce(h.reason, '')
+		FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id LEFT JOIN hosted_servers h ON h.server_id = s.id
+		ORDER BY s.slug`)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +119,15 @@ func (s *Store) Servers(ctx context.Context) ([]ServerRow, error) {
 	var out []ServerRow
 	for rows.Next() {
 		var r ServerRow
-		if err := rows.Scan(&r.Slug, &r.URL, &r.Enabled, &r.AuthType, &r.AuthHeader, &r.HasCredential, &r.CreatedAt, &r.Internal, &r.Shop); err != nil {
+		var image, path, status, reason sql.NullString
+		var port sql.NullInt64
+		if err := rows.Scan(&r.Slug, &r.URL, &r.Enabled, &r.AuthType, &r.AuthHeader, &r.HasCredential, &r.CreatedAt, &r.Internal, &r.Shop,
+			&image, &port, &path, &status, &reason); err != nil {
 			return nil, err
+		}
+		if image.Valid {
+			r.Hosted = &HostedState{Image: image.String, Port: int(port.Int64), Path: path.String,
+				Status: HostedStatus(status.String), Reason: reason.String}
 		}
 		out = append(out, r)
 	}
@@ -161,13 +181,15 @@ func (s *Store) UpdateServer(ctx context.Context, box *secretbox.Box, slug strin
 	return affected(res, classify(err))
 }
 
-// ServerShop returns the slug of the store that owns the server, "" for an ordinary
-// server, or ErrNotFound.
-func (s *Store) ServerShop(ctx context.Context, slug string) (string, error) {
-	var shop string
-	err := s.db.QueryRowContext(ctx, `
-		SELECT coalesce(sh.slug, '') FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id WHERE s.slug = $1`, slug).Scan(&shop)
-	return shop, notFound(err)
+// ServerOwner says what manages the server: shop is the slug of the store that owns it, ""
+// otherwise, and hosted reports whether the platform runs it from an image. A missing server
+// is ErrNotFound.
+func (s *Store) ServerOwner(ctx context.Context, slug string) (shop string, hosted bool, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		SELECT coalesce(sh.slug, ''), h.server_id IS NOT NULL
+		FROM servers s LEFT JOIN shops sh ON sh.id = s.shop_id LEFT JOIN hosted_servers h ON h.server_id = s.id
+		WHERE s.slug = $1`, slug).Scan(&shop, &hosted)
+	return shop, hosted, notFound(err)
 }
 
 // DeleteServer removes a server. Its audit rows remain.

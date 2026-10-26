@@ -25,17 +25,21 @@ import (
 // a store slug can never name a namespace someone else owns.
 const managedBy = "mirage-provisioner"
 
-// Kube is the Cluster that Helm and the Kubernetes API provide. It finds the cluster the way
-// kubectl does: in a pod, through the pod's service account.
+// Kube is the Cluster and HostedCluster that Helm and the Kubernetes API provide. It finds
+// the cluster the way kubectl does: in a pod, through the pod's service account.
 type Kube struct {
-	chartDir string
-	client   kubernetes.Interface
+	storeChart  string
+	hostedChart string
+	client      kubernetes.Interface
 }
 
-// NewKube returns a Kube that installs the chart in chartDir.
-func NewKube(chartDir string) (*Kube, error) {
-	if _, err := loader.Load(chartDir); err != nil {
-		return nil, fmt.Errorf("loading the store chart: %w", err)
+// NewKube returns a Kube that installs stores from the chart in storeChart and hosted servers
+// from the chart in hostedChart.
+func NewKube(storeChart, hostedChart string) (*Kube, error) {
+	for _, dir := range []string{storeChart, hostedChart} {
+		if _, err := loader.Load(dir); err != nil {
+			return nil, fmt.Errorf("loading the chart in %s: %w", dir, err)
+		}
 	}
 	config, err := cli.New().RESTClientGetter().ToRESTConfig()
 	if err != nil {
@@ -45,7 +49,7 @@ func NewKube(chartDir string) (*Kube, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Kube{chartDir: chartDir, client: client}, nil
+	return &Kube{storeChart: storeChart, hostedChart: hostedChart, client: client}, nil
 }
 
 func (k *Kube) helm(namespace string) (*action.Configuration, error) {
@@ -58,17 +62,32 @@ func (k *Kube) helm(namespace string) (*action.Configuration, error) {
 	return cfg, nil
 }
 
+// Namespace labels. kindLabel's key says what a namespace holds and its value is the slug.
+const (
+	storeLabel  = "mirage/store"
+	hostedLabel = "mirage/hosted"
+)
+
 // EnsureNamespace implements Cluster.
 func (k *Kube) EnsureNamespace(ctx context.Context, namespace, slug string) error {
+	// WordPress's image runs Apache as root, which the restricted level forbids.
+	return k.ensureNamespace(ctx, namespace, storeLabel, slug, "baseline")
+}
+
+// EnsureHostedNamespace implements HostedCluster.
+func (k *Kube) EnsureHostedNamespace(ctx context.Context, namespace, slug string) error {
+	return k.ensureNamespace(ctx, namespace, hostedLabel, slug, "restricted")
+}
+
+func (k *Kube) ensureNamespace(ctx context.Context, namespace, kindLabel, slug, podSecurity string) error {
 	ns, err := k.client.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		_, err = k.client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": managedBy,
-				"mirage/store":                 slug,
-				// WordPress's image runs Apache as root, which the restricted level forbids.
-				"pod-security.kubernetes.io/enforce": "baseline",
+				"app.kubernetes.io/managed-by":       managedBy,
+				kindLabel:                            slug,
+				"pod-security.kubernetes.io/enforce": podSecurity,
 			},
 		}}, metav1.CreateOptions{})
 		return err
@@ -76,8 +95,8 @@ func (k *Kube) EnsureNamespace(ctx context.Context, namespace, slug string) erro
 	if err != nil {
 		return err
 	}
-	if ns.Labels["app.kubernetes.io/managed-by"] != managedBy {
-		return fmt.Errorf("namespace %s exists but was not created for a store", namespace)
+	if ns.Labels["app.kubernetes.io/managed-by"] != managedBy || ns.Labels[kindLabel] != slug {
+		return fmt.Errorf("namespace %s exists but was not created for %s", namespace, slug)
 	}
 	if ns.DeletionTimestamp != nil {
 		return fmt.Errorf("namespace %s is still being deleted", namespace)
@@ -96,7 +115,7 @@ func (k *Kube) DeleteNamespace(ctx context.Context, namespace string) (bool, err
 		return false, err
 	}
 	if ns.Labels["app.kubernetes.io/managed-by"] != managedBy {
-		return false, fmt.Errorf("refusing to delete namespace %s: it was not created for a store", namespace)
+		return false, fmt.Errorf("refusing to delete namespace %s: the provisioner did not create it", namespace)
 	}
 	if ns.DeletionTimestamp == nil {
 		err = k.client.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
@@ -109,11 +128,20 @@ func (k *Kube) DeleteNamespace(ctx context.Context, namespace string) (bool, err
 
 // Release implements Cluster.
 func (k *Kube) Release(_ context.Context, namespace string) (ReleaseState, error) {
+	return k.release(namespace, releaseName)
+}
+
+// HostedRelease implements HostedCluster.
+func (k *Kube) HostedRelease(_ context.Context, namespace string) (ReleaseState, error) {
+	return k.release(namespace, hostedRelease)
+}
+
+func (k *Kube) release(namespace, name string) (ReleaseState, error) {
 	cfg, err := k.helm(namespace)
 	if err != nil {
 		return 0, err
 	}
-	rel, err := action.NewStatus(cfg).Run(releaseName)
+	rel, err := action.NewStatus(cfg).Run(name)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return ReleaseAbsent, nil
 	}
@@ -137,19 +165,28 @@ func (k *Kube) Release(_ context.Context, namespace string) (ReleaseState, error
 
 // Install implements Cluster.
 func (k *Kube) Install(ctx context.Context, namespace string, values map[string]any) error {
+	return k.install(ctx, namespace, k.storeChart, releaseName, values)
+}
+
+// InstallHosted implements HostedCluster.
+func (k *Kube) InstallHosted(ctx context.Context, namespace string, values map[string]any) error {
+	return k.install(ctx, namespace, k.hostedChart, hostedRelease, values)
+}
+
+func (k *Kube) install(ctx context.Context, namespace, chartDir, name string, values map[string]any) error {
 	cfg, err := k.helm(namespace)
 	if err != nil {
 		return err
 	}
-	// Loaded per install: Helm edits a chart while resolving its dependencies, so stores
+	// Loaded per install: Helm edits a chart while resolving its dependencies, so releases
 	// installing in parallel must not share one.
-	chart, err := loader.Load(k.chartDir)
+	chart, err := loader.Load(chartDir)
 	if err != nil {
 		return err
 	}
 	install := action.NewInstall(cfg)
 	install.Namespace = namespace
-	install.ReleaseName = releaseName
+	install.ReleaseName = name
 	// Return once the resources exist; Health watches them come up.
 	install.WaitStrategy = kube.HookOnlyStrategy
 	install.Timeout = time.Minute
@@ -157,8 +194,36 @@ func (k *Kube) Install(ctx context.Context, namespace string, values map[string]
 	return err
 }
 
+// UpgradeHosted implements HostedCluster. It replaces the release's values with values, so
+// the release always matches the server's row.
+func (k *Kube) UpgradeHosted(ctx context.Context, namespace string, values map[string]any) error {
+	cfg, err := k.helm(namespace)
+	if err != nil {
+		return err
+	}
+	chart, err := loader.Load(k.hostedChart)
+	if err != nil {
+		return err
+	}
+	upgrade := action.NewUpgrade(cfg)
+	upgrade.Namespace = namespace
+	upgrade.WaitStrategy = kube.HookOnlyStrategy
+	upgrade.Timeout = time.Minute
+	_, err = upgrade.RunWithContext(ctx, hostedRelease, chart, values)
+	return err
+}
+
 // Uninstall implements Cluster.
 func (k *Kube) Uninstall(_ context.Context, namespace string) error {
+	return k.uninstall(namespace, releaseName)
+}
+
+// UninstallHosted implements HostedCluster.
+func (k *Kube) UninstallHosted(_ context.Context, namespace string) error {
+	return k.uninstall(namespace, hostedRelease)
+}
+
+func (k *Kube) uninstall(namespace, name string) error {
 	cfg, err := k.helm(namespace)
 	if err != nil {
 		return err
@@ -166,7 +231,7 @@ func (k *Kube) Uninstall(_ context.Context, namespace string) error {
 	uninstall := action.NewUninstall(cfg)
 	uninstall.WaitStrategy = kube.HookOnlyStrategy
 	uninstall.Timeout = time.Minute
-	_, err = uninstall.Run(releaseName)
+	_, err = uninstall.Run(name)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return nil
 	}
@@ -287,4 +352,74 @@ func (k *Kube) setupProgress(ctx context.Context, namespace string, job *batchv1
 		return fmt.Sprintf("%s is at: %s", setup, line), nil
 	}
 	return setup + " is still running", nil
+}
+
+// HostedNamespaces implements HostedCluster.
+func (k *Kube) HostedNamespaces(ctx context.Context) ([]string, error) {
+	list, err := k.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=" + managedBy + "," + hostedLabel})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, ns := range list.Items {
+		if ns.DeletionTimestamp == nil {
+			names = append(names, ns.Name)
+		}
+	}
+	return names, nil
+}
+
+// HostedHealth implements HostedCluster. A hosted server is ready when every replica runs
+// the release's current pod template.
+func (k *Kube) HostedHealth(ctx context.Context, namespace string) (Health, error) {
+	d, err := k.client.AppsV1().Deployments(namespace).Get(ctx, hostedRelease, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return Health{Waiting: "the server's resources are being created"}, nil
+	}
+	if err != nil {
+		return Health{}, err
+	}
+	want := int32(1)
+	if d.Spec.Replicas != nil {
+		want = *d.Spec.Replicas
+	}
+	s := d.Status
+	if s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == want && s.Replicas == want && s.AvailableReplicas == want {
+		return Health{Ready: true}, nil
+	}
+	pods, err := k.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return Health{}, err
+	}
+	for _, pod := range pods.Items {
+		for _, c := range pod.Status.ContainerStatuses {
+			w := c.State.Waiting
+			if w == nil {
+				continue
+			}
+			msg := fmt.Sprintf("%s: %s", w.Reason, w.Message)
+			switch {
+			// Retrying cannot fix these: the image or its security settings must change.
+			case w.Reason == "InvalidImageName" || w.Reason == "CreateContainerConfigError" || w.Reason == "ErrImageNeverPull":
+				return Health{Broken: msg}, nil
+			case w.Reason == "CrashLoopBackOff" && c.RestartCount >= 3:
+				return Health{Broken: fmt.Sprintf("the server keeps exiting (%d restarts): %s", c.RestartCount, lastExit(c))}, nil
+			case w.Reason != "ContainerCreating":
+				return Health{Waiting: msg}, nil
+			}
+		}
+	}
+	events, err := k.client.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: "type=Warning,reason=FailedCreate"})
+	if err == nil && len(events.Items) > 0 {
+		return Health{Waiting: events.Items[len(events.Items)-1].Message}, nil
+	}
+	return Health{Waiting: "the server is starting"}, nil
+}
+
+func lastExit(c corev1.ContainerStatus) string {
+	if t := c.LastTerminationState.Terminated; t != nil {
+		return fmt.Sprintf("exit code %d %s", t.ExitCode, strings.TrimSpace(t.Message))
+	}
+	return "no exit status"
 }

@@ -1,9 +1,13 @@
 package api
 
 import (
+	"cmp"
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kaizakin/mirage/internal/auth"
@@ -35,7 +39,17 @@ type serverJSON struct {
 	// Internal servers were created by the platform and may reach cluster-internal addresses.
 	Internal bool `json:"internal"`
 	// Store is the slug of the provisioned store that owns this server, if any.
-	Store string `json:"store,omitempty"`
+	Store  string      `json:"store,omitempty"`
+	Hosted *hostedJSON `json:"hosted,omitempty"`
+}
+
+// hostedJSON is how the platform runs a hosted server. Its environment is write-only.
+type hostedJSON struct {
+	Image  string `json:"image"`
+	Port   int    `json:"port"`
+	Path   string `json:"path"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
 }
 
 func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
@@ -71,12 +85,53 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 }
 
 type serverInput struct {
-	Slug       string  `json:"slug"`
-	URL        *string `json:"url"`
-	Enabled    *bool   `json:"enabled"`
-	AuthType   *string `json:"auth_type"`
-	AuthHeader *string `json:"auth_header"`
-	Credential *string `json:"credential"`
+	Slug       string       `json:"slug"`
+	URL        *string      `json:"url"`
+	Enabled    *bool        `json:"enabled"`
+	AuthType   *string      `json:"auth_type"`
+	AuthHeader *string      `json:"auth_header"`
+	Credential *string      `json:"credential"`
+	Hosted     *hostedInput `json:"hosted"`
+}
+
+// hostedInput asks the platform to run the server from an image instead of reaching it at a
+// URL. Port and path are fixed once it exists; image and env may change.
+type hostedInput struct {
+	Image *string           `json:"image"`
+	Port  int               `json:"port"`
+	Path  string            `json:"path"`
+	Env   map[string]string `json:"env"`
+}
+
+var (
+	// An image reference: [registry/]repository[:tag][@digest], without whitespace or quotes.
+	imagePattern   = regexp.MustCompile(`^[a-z0-9]+([._/:@-][a-zA-Z0-9_.-]+)*$`)
+	envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
+
+// validate checks a hosted server's fields; creating requires an image.
+func (in hostedInput) validate(creating bool) string {
+	if creating && in.Image == nil {
+		return "hosted.image is required"
+	}
+	if in.Image != nil && (len(*in.Image) > 255 || !imagePattern.MatchString(*in.Image)) {
+		return "hosted.image must be an image reference such as ghcr.io/org/server:1.2"
+	}
+	if !creating && (in.Port != 0 || in.Path != "") {
+		return "a hosted server's port and path are fixed; delete it and host it again to change them"
+	}
+	if in.Port < 0 || in.Port > 65535 {
+		return "hosted.port must be between 1 and 65535"
+	}
+	if in.Path != "" && !strings.HasPrefix(in.Path, "/") {
+		return `hosted.path must start with "/"`
+	}
+	for name := range in.Env {
+		if !envNamePattern.MatchString(name) {
+			return fmt.Sprintf("environment variable name %q must be letters, digits, and '_', not starting with a digit", name)
+		}
+	}
+	return ""
 }
 
 // validate checks the fields present; creating also requires slug, url, and auth_type.
@@ -85,8 +140,16 @@ func (in serverInput) validate(creating bool) string {
 		if err := naming.ValidateSlug(in.Slug); err != nil {
 			return err.Error()
 		}
-		if in.URL == nil || in.AuthType == nil {
-			return "slug, url, and auth_type are required"
+		if in.AuthType == nil || (in.URL == nil) == (in.Hosted == nil) {
+			return "slug, auth_type, and either url or hosted are required"
+		}
+	}
+	if in.Hosted != nil {
+		if in.URL != nil {
+			return "the platform chooses a hosted server's url; send url or hosted, not both"
+		}
+		if msg := in.Hosted.validate(creating); msg != "" {
+			return msg
 		}
 	}
 	if in.URL != nil {
@@ -113,14 +176,22 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	seed := store.ServerSeed{Slug: in.Slug, URL: *in.URL, AuthType: *in.AuthType}
+	seed := store.ServerSeed{Slug: in.Slug, AuthType: *in.AuthType}
 	if in.AuthHeader != nil {
 		seed.AuthHeader = *in.AuthHeader
 	}
 	if in.Credential != nil {
 		seed.Credential = *in.Credential
 	}
-	if err := a.Store.CreateServer(r.Context(), a.Box, seed); err != nil {
+	var err error
+	if h := in.Hosted; h != nil {
+		spec := store.HostedSpec{Image: *h.Image, Port: cmp.Or(h.Port, 8080), Path: cmp.Or(h.Path, "/mcp"), Env: h.Env}
+		err = a.Store.CreateHostedServer(r.Context(), a.Box, seed, spec)
+	} else {
+		seed.URL = *in.URL
+		err = a.Store.CreateServer(r.Context(), a.Box, seed)
+	}
+	if err != nil {
 		storeError(w, r, err)
 		return
 	}
@@ -129,7 +200,9 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
-	if a.managedServer(w, r, r.PathValue("slug")) {
+	slug := r.PathValue("slug")
+	hosted, stop := a.managedServer(w, r, slug)
+	if stop {
 		return
 	}
 	var in serverInput
@@ -140,17 +213,33 @@ func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+	switch {
+	case hosted && in.URL != nil:
+		writeError(w, http.StatusConflict, "the platform chooses a hosted server's url; change its image instead")
+		return
+	case !hosted && in.Hosted != nil:
+		writeError(w, http.StatusConflict, "server "+slug+" is not hosted by the platform")
+		return
+	}
 	patch := store.ServerPatch{URL: in.URL, Enabled: in.Enabled, AuthType: in.AuthType, AuthHeader: in.AuthHeader, Credential: in.Credential}
-	if err := a.Store.UpdateServer(r.Context(), a.Box, r.PathValue("slug"), patch); err != nil {
+	if err := a.Store.UpdateServer(r.Context(), a.Box, slug, patch); err != nil {
 		storeError(w, r, err)
 		return
+	}
+	if h := in.Hosted; h != nil {
+		if err := a.Store.UpdateHostedServer(r.Context(), a.Box, slug, store.HostedPatch{Image: h.Image, Env: h.Env}); err != nil {
+			storeError(w, r, err)
+			return
+		}
 	}
 	a.Reload()
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// deleteServer removes a server. A hosted server's namespace goes with it: the provisioner
+// deletes namespaces whose server is gone.
 func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {
-	if a.managedServer(w, r, r.PathValue("slug")) {
+	if _, stop := a.managedServer(w, r, r.PathValue("slug")); stop {
 		return
 	}
 	if err := a.Store.DeleteServer(r.Context(), r.PathValue("slug")); err != nil {

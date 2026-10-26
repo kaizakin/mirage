@@ -1,8 +1,9 @@
 .git
 .claude
 charts
-# The provisioner image ships the store chart.
+# The provisioner image ships the store and hosted-mcp charts.
 !charts/store
+!charts/hosted-mcp
 test
 AGENTS.md
 CLAUDE.md
