@@ -1,0 +1,33 @@
+# Let's Encrypt issuers for cert-manager, answering HTTP-01 challenges through k3s's Traefik.
+# values-prod.yaml uses letsencrypt. Point it at letsencrypt-staging while testing DNS and
+# firewall rules: staging certificates are untrusted, but its rate limits are far higher.
+#   kubectl apply -f deploy/vps/cluster-issuer.yaml
+# Let's Encrypt no longer sends expiry emails, so no contact address is set; add
+# spec.acme.email to register one.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-staging-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
