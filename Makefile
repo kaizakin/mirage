@@ -118,6 +118,7 @@ e2e:
 	test/e2e/drills.sh
 	test/e2e/oauth.sh
 	test/e2e/permissions.sh
+	test/e2e/hosted.sh
 	test/e2e/tool-search.sh
 	test/e2e/scaling.sh
 	test/e2e/stores.sh

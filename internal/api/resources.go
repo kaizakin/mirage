@@ -67,6 +67,9 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 		s := serverJSON{Slug: row.Slug, URL: row.URL, Enabled: row.Enabled, AuthType: row.AuthType,
 			AuthHeader: row.AuthHeader, HasCredential: row.HasCredential, CreatedAt: row.CreatedAt, Tools: []toolJSON{},
 			Internal: row.Internal, Store: row.Shop}
+		if h := row.Hosted; h != nil {
+			s.Hosted = &hostedJSON{Image: h.Image, Port: h.Port, Path: h.Path, Status: string(h.Status), Reason: h.Reason}
+		}
 		st, running := live[row.Slug]
 		switch {
 		case !row.Enabled:
