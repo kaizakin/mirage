@@ -28,11 +28,32 @@ export interface Server {
   created_at: string;
   /** The slug of the store that owns this server; its lifecycle, not the admin, manages it. */
   store?: string;
+  /** Set when the platform runs the server from an image. */
+  hosted?: HostedServer;
+}
+
+export type HostedStatus = "deploying" | "running" | "failed";
+
+export interface HostedServer {
+  image: string;
+  port: number;
+  path: string;
+  status: HostedStatus;
+  reason?: string;
+}
+
+/** Runs a server from an image. Port and path are fixed once it exists; env is write-only. */
+export interface HostedInput {
+  image?: string;
+  port?: number;
+  path?: string;
+  env?: Record<string, string>;
 }
 
 export interface NewServer {
   slug: string;
-  url: string;
+  url?: string;
+  hosted?: HostedInput;
   auth_type: AuthType;
   auth_header?: string;
   credential?: string;
@@ -40,6 +61,7 @@ export interface NewServer {
 
 export interface ServerPatch {
   url?: string;
+  hosted?: HostedInput;
   enabled?: boolean;
   auth_type?: AuthType;
   auth_header?: string;

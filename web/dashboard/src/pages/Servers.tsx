@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/endpoints";
-import type { Server } from "../api/types";
-import { Badge } from "../components/Badge";
+import type { HostedStatus, Server } from "../api/types";
+import { Badge, type Tone } from "../components/Badge";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { Icon } from "../components/Icon";
 import { EmptyState, ErrorNotice, Loading, MutationError } from "../components/States";
@@ -13,6 +13,8 @@ import { ServerFields } from "./ServerFields";
 import { draftFrom, emptyDraft, toNewServer, toPatch } from "./serverForm";
 
 const serversKey = ["servers"] as const;
+
+const hostedTone: Record<HostedStatus, Tone> = { deploying: "amber", running: "green", failed: "red" };
 
 function AddServerForm({ onDone }: { onDone: () => void }) {
   const client = useQueryClient();
@@ -141,6 +143,11 @@ function ServerCard({ server }: { server: Server }) {
               Store: {server.store}
             </Link>
           )}
+          {server.hosted && (
+            <span className="server-chip" title={server.hosted.image}>
+              Hosted
+            </span>
+          )}
         </div>
         <div className="server-url mono truncate" title={server.url}>
           {server.url}
@@ -184,6 +191,12 @@ function ServerCard({ server }: { server: Server }) {
           )}
         </div>
       </div>
+      {server.hosted?.reason && (
+        <p className="reason">
+          <Icon name="alert" size={14} />
+          <span>Deployment failed: {server.hosted.reason}</span>
+        </p>
+      )}
       {server.reason && (
         <p className="reason">
           <Icon name="alert" size={14} />
@@ -197,6 +210,15 @@ function ServerCard({ server }: { server: Server }) {
             <AuthSummary server={server} />
           </dd>
         </div>
+        {server.hosted && (
+          <div>
+            <dt>Image</dt>
+            <dd>
+              <code>{server.hosted.image}</code>{" "}
+              <Badge tone={hostedTone[server.hosted.status]}>{server.hosted.status}</Badge>
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Added</dt>
           <dd>{formatDate(server.created_at)}</dd>

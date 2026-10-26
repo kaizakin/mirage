@@ -42,18 +42,95 @@ export function ServerFields({ idPrefix, draft, onChange, mode, hasCredential = 
           </span>
         </div>
       )}
-      <div className="field">
-        <label htmlFor={id("url")}>MCP URL</label>
-        <input
-          id={id("url")}
-          type="url"
-          required
-          placeholder="http://service.namespace.svc:8080/mcp"
-          spellCheck={false}
-          value={draft.url}
-          onChange={(e) => { set("url", e.target.value); }}
-        />
-      </div>
+      {mode === "create" && (
+        <div className="field">
+          <label htmlFor={id("source")}>Source</label>
+          <select id={id("source")} value={draft.source} onChange={(e) => { set("source", e.target.value === "image" ? "image" : "url"); }}>
+            <option value="url">Connect to a URL</option>
+            <option value="image">Run a container image</option>
+          </select>
+        </div>
+      )}
+      {draft.source === "url" ? (
+        <div className="field">
+          <label htmlFor={id("url")}>MCP URL</label>
+          <input
+            id={id("url")}
+            type="url"
+            required
+            placeholder="https://mcp.example.com/mcp"
+            aria-describedby={id("url-hint")}
+            spellCheck={false}
+            value={draft.url}
+            onChange={(e) => { set("url", e.target.value); }}
+          />
+          <span id={id("url-hint")} className="hint">
+            A public address. To run a server inside the cluster, host its image instead.
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="field">
+            <label htmlFor={id("image")}>Image</label>
+            <input
+              id={id("image")}
+              required
+              placeholder="ghcr.io/org/mcp-server:1.0"
+              aria-describedby={id("image-hint")}
+              spellCheck={false}
+              value={draft.image}
+              onChange={(e) => { set("image", e.target.value); }}
+            />
+            <span id={id("image-hint")} className="hint">
+              Runs as a non-root user with a read-only filesystem, reachable only by the gateway.
+            </span>
+          </div>
+          {mode === "create" && (
+            <>
+              <div className="field">
+                <label htmlFor={id("port")}>Port</label>
+                <input
+                  id={id("port")}
+                  type="number"
+                  min={1}
+                  max={65535}
+                  required
+                  value={draft.port}
+                  onChange={(e) => { set("port", e.target.value); }}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={id("path")}>MCP path</label>
+                <input
+                  id={id("path")}
+                  required
+                  pattern="/.*"
+                  spellCheck={false}
+                  value={draft.path}
+                  onChange={(e) => { set("path", e.target.value); }}
+                />
+              </div>
+            </>
+          )}
+          <div className="field">
+            <label htmlFor={id("env")}>{mode === "edit" ? "New environment" : "Environment"}</label>
+            <textarea
+              id={id("env")}
+              rows={3}
+              placeholder="API_KEY=…"
+              aria-describedby={id("env-hint")}
+              spellCheck={false}
+              value={draft.env}
+              onChange={(e) => { set("env", e.target.value); }}
+            />
+            <span id={id("env-hint")} className="hint">
+              {mode === "edit"
+                ? "One KEY=value per line. Leave blank to keep the stored environment."
+                : "One KEY=value per line. Stored encrypted and never shown again."}
+            </span>
+          </div>
+        </>
+      )}
       <div className="field">
         <label htmlFor={id("auth")}>Authentication</label>
         <select id={id("auth")} value={draft.authType} onChange={(e) => {
