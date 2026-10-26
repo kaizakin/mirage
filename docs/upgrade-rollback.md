@@ -56,6 +56,8 @@ The gateway embeds its migrations and applies them with goose when it starts. A 
 
 Every migration so far adds a table, a column, or a constraint. An older gateway therefore runs against a newer schema, and a rollback needs no database step. `internal/store/rollback_live_test.go` checks that an older set of migrations starts against a newer database.
 
+An older gateway ignores tables it does not know. A rollback past a feature therefore switches the feature off until the next upgrade. For example, rolling back past `00007_tool_rules.sql` stops enforcing tool permissions.
+
 Keep new migrations additive. A migration that drops or renames something breaks rollback: the older gateway would query what is gone. For such a change, ship it in two releases. The first release stops using the old column. The second release drops it. To undo a release that already applied a breaking migration, restore the dump from before the upgrade.
 
 ## Upgrade stores
