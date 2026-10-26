@@ -18,7 +18,11 @@ fail() {
   log "FAIL  $*"
   exit 1
 }
-cleanup() { for p in "${probes[@]}"; do kubectl -n "$NAMESPACE" delete pod "$p" --ignore-not-found --wait=false >/dev/null 2>&1 || true; done; }
+other="hardening-other-$RANDOM"
+cleanup() {
+  for p in "${probes[@]}"; do kubectl -n "$NAMESPACE" delete pod "$p" --ignore-not-found --wait=false >/dev/null 2>&1 || true; done
+  kubectl delete namespace "$other" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 # refused <description> <kubectl args...>: the provisioner's attempt must fail.
@@ -37,7 +41,8 @@ pass "the provisioner cannot read the platform's Secrets: ${out##*: }"
 refused "bind its rights in the platform namespace" -n "$NAMESPACE" create rolebinding escalate \
   --clusterrole="$RELEASE_NAME-provisioner-tenant" --serviceaccount="$NAMESPACE:$RELEASE_NAME-provisioner"
 refused "create a namespace not labelled as its own" create namespace "hardening-$RANDOM"
-refused "delete a namespace it did not create" delete namespace default
+kubectl create namespace "$other" >/dev/null
+refused "delete a namespace it did not create" delete namespace "$other"
 kubectl --as="$sa" -n "$store_ns" create rolebinding hardening-probe --clusterrole="$RELEASE_NAME-provisioner-tenant" \
   --serviceaccount="$NAMESPACE:$RELEASE_NAME-provisioner" --dry-run=server >/dev/null ||
   fail "the provisioner cannot bind its rights in its own namespace $store_ns"
@@ -52,16 +57,17 @@ probe() {
   kubectl -n "$NAMESPACE" wait --for=condition=Ready "pod/$1" --timeout=60s >/dev/null
 }
 reach() { kubectl -n "$NAMESPACE" exec "$1" -- nc -z -w 4 "$2" "$3" >/dev/null 2>&1 && echo open || echo blocked; }
-probe hardening-gw app=gateway
-probe hardening-none hardening=probe
+gw="hardening-gw-$RANDOM" none="hardening-none-$RANDOM"
+probe "$gw" app=gateway
+probe "$none" hardening=probe
 
 declare -A want=(
-  ["hardening-gw $RELEASE_NAME-postgres 5432"]=open
-  ["hardening-gw $RELEASE_NAME-currency-mcp 8080"]=open
-  ["hardening-gw $RELEASE_NAME-dashboard 8080"]=blocked
-  ["hardening-gw 169.254.169.254 80"]=blocked
-  ["hardening-none $RELEASE_NAME-postgres 5432"]=blocked
-  ["hardening-none $RELEASE_NAME-gateway 8080"]=blocked
+  ["$gw $RELEASE_NAME-postgres 5432"]=open
+  ["$gw $RELEASE_NAME-currency-mcp 8080"]=open
+  ["$gw $RELEASE_NAME-dashboard 8080"]=blocked
+  ["$gw 169.254.169.254 80"]=blocked
+  ["$none $RELEASE_NAME-postgres 5432"]=blocked
+  ["$none $RELEASE_NAME-gateway 8080"]=blocked
 )
 for key in "${!want[@]}"; do
   read -r pod host port <<<"$key"

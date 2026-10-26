@@ -37,7 +37,7 @@ help:
 	@echo "  make helm-uninstall  Uninstall the release and delete its volumes and every provisioned store"
 	@echo "  make test-live       Run the WooCommerce client tests against store STORE=<slug>"
 	@echo "  make test-store      Run the migration tests against the cluster Postgres"
-	@echo "  make e2e             Run the API role checks, failure drills, and store provisioning checks"
+	@echo "  make e2e             Run every end-to-end check against the running cluster"
 	@echo "  make status          Check status of the release and pods"
 	@echo "  make monitoring      Install Prometheus and Grafana, then upgrade the platform so it is scraped"
 
@@ -119,6 +119,7 @@ e2e:
 	test/e2e/oauth.sh
 	test/e2e/permissions.sh
 	test/e2e/hosted.sh
+	test/e2e/hardening.sh
 	test/e2e/tool-search.sh
 	test/e2e/scaling.sh
 	test/e2e/stores.sh
