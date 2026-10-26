@@ -7,9 +7,12 @@ metadata:
   labels:
     {{- include "provisioner.labels" . | nindent 4 }}
 ---
-# Kubernetes cannot scope rights to namespaces that do not exist yet, so this is a
-# ClusterRole: namespaces themselves, plus the kinds the store chart contains. The
-# provisioner only adopts and deletes namespaces it labelled itself.
+# Least privilege. Kubernetes cannot scope rights to namespaces that do not exist yet, so the
+# provisioner holds only what it needs across the cluster: managing namespaces, and binding
+# the tenant role below inside them. It gains the tenant role in a namespace by creating that
+# RoleBinding when it creates the namespace. The admission policy at the end refuses any
+# write it attempts outside a namespace it labelled itself, so neither right reaches the
+# platform's own namespace or the system's.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -20,11 +23,28 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, create, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    verbs: [get, create]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [bind]
+    resourceNames: [{{ $fullname }}-tenant]
+---
+# What the provisioner may do inside a store or hosted server namespace: the kinds the store
+# and hosted-mcp charts contain. Bound per namespace, never cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-tenant
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+rules:
   - apiGroups: [""]
     resources: [secrets, configmaps, services, serviceaccounts, persistentvolumeclaims, resourcequotas, limitranges]
     verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [""]
-    resources: [pods, events]
+    resources: [pods, pods/log, events]
     verbs: [get, list, watch]
   - apiGroups: [apps]
     resources: [deployments, statefulsets]
@@ -54,3 +74,47 @@ subjects:
   - kind: ServiceAccount
     name: {{ $fullname }}
     namespace: {{ .Release.Namespace }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $fullname }}-own-namespaces
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: ["*"]
+  matchConditions:
+    - name: is-the-provisioner
+      expression: request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:{{ $fullname }}"
+  variables:
+    - name: managed
+      expression: '"app.kubernetes.io/managed-by"'
+    - name: target
+      expression: 'request.operation == "DELETE" ? oldObject : object'
+  validations:
+    - expression: >-
+        request.resource.resource != "namespaces" ||
+        (has(variables.target.metadata.labels) && variables.managed in variables.target.metadata.labels &&
+         variables.target.metadata.labels[variables.managed] == "mirage-provisioner")
+      message: the provisioner may only create or delete namespaces labelled as its own
+    - expression: >-
+        namespaceObject == null ||
+        (has(namespaceObject.metadata.labels) && variables.managed in namespaceObject.metadata.labels &&
+         namespaceObject.metadata.labels[variables.managed] == "mirage-provisioner")
+      message: the provisioner may only change objects in namespaces it created
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $fullname }}-own-namespaces
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  policyName: {{ $fullname }}-own-namespaces
+  validationActions: [Deny]

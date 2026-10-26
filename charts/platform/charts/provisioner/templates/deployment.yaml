@@ -54,6 +54,17 @@ spec:
                   key: secretbox-key
             - name: GATEWAY_NAMESPACE
               value: {{ .Release.Namespace | quote }}
+            # The role the provisioner binds to itself in each namespace it creates.
+            - name: TENANT_ROLE
+              value: {{ $fullname }}-tenant
+            - name: SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: PROVISION_TIMEOUT
               value: {{ .Values.timeout | quote }}
             - name: STORE_SCHEME

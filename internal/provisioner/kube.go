@@ -16,6 +16,7 @@ import (
 	"helm.sh/helm/v4/pkg/storage/driver"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,12 +31,22 @@ const managedBy = "mirage-provisioner"
 type Kube struct {
 	storeChart  string
 	hostedChart string
+	tenant      Tenant
 	client      kubernetes.Interface
+}
+
+// Tenant is how the provisioner gets its rights inside a namespace it creates: a RoleBinding
+// there from Role, a ClusterRole, to its own service account. An empty Role skips the binding,
+// for a provisioner whose credentials already reach every namespace, such as a developer's.
+type Tenant struct {
+	Role           string
+	ServiceAccount string
+	Namespace      string // the service account's
 }
 
 // NewKube returns a Kube that installs stores from the chart in storeChart and hosted servers
 // from the chart in hostedChart.
-func NewKube(storeChart, hostedChart string) (*Kube, error) {
+func NewKube(storeChart, hostedChart string, tenant Tenant) (*Kube, error) {
 	for _, dir := range []string{storeChart, hostedChart} {
 		if _, err := loader.Load(dir); err != nil {
 			return nil, fmt.Errorf("loading the chart in %s: %w", dir, err)
@@ -49,7 +60,7 @@ func NewKube(storeChart, hostedChart string) (*Kube, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Kube{storeChart: storeChart, hostedChart: hostedChart, client: client}, nil
+	return &Kube{storeChart: storeChart, hostedChart: hostedChart, tenant: tenant, client: client}, nil
 }
 
 func (k *Kube) helm(namespace string) (*action.Configuration, error) {
@@ -90,7 +101,10 @@ func (k *Kube) ensureNamespace(ctx context.Context, namespace, kindLabel, slug, 
 				"pod-security.kubernetes.io/enforce": podSecurity,
 			},
 		}}, metav1.CreateOptions{})
-		return err
+		if err != nil {
+			return err
+		}
+		return k.bindTenant(ctx, namespace)
 	}
 	if err != nil {
 		return err
@@ -101,7 +115,30 @@ func (k *Kube) ensureNamespace(ctx context.Context, namespace, kindLabel, slug, 
 	if ns.DeletionTimestamp != nil {
 		return fmt.Errorf("namespace %s is still being deleted", namespace)
 	}
-	return nil
+	// Also binds namespaces created before the provisioner's rights were scoped this way.
+	return k.bindTenant(ctx, namespace)
+}
+
+// tenantBinding is the RoleBinding that gives the provisioner its rights in a namespace.
+const tenantBinding = "mirage-provisioner"
+
+func (k *Kube) bindTenant(ctx context.Context, namespace string) error {
+	if k.tenant.Role == "" {
+		return nil
+	}
+	_, err := k.client.RbacV1().RoleBindings(namespace).Get(ctx, tenantBinding, metav1.GetOptions{})
+	if !apierrors.IsNotFound(err) {
+		return err
+	}
+	_, err = k.client.RbacV1().RoleBindings(namespace).Create(ctx, &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: tenantBinding},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: k.tenant.Role},
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: k.tenant.ServiceAccount, Namespace: k.tenant.Namespace}},
+	}, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
 }
 
 // DeleteNamespace implements Cluster. Deleting the namespace deletes everything in it: the

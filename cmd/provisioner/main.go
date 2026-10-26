@@ -5,11 +5,13 @@
 //
 // It reads DATABASE_URL and SECRETBOX_KEY, both required and shared with the gateway;
 // STORE_CHART and HOSTED_CHART, the charts' directories (default /charts/store and
-// /charts/hosted-mcp); GATEWAY_NAMESPACE, where the
-// gateway runs (default mirage); PROVISION_TIMEOUT, how long a store may take to become ready
-// before it fails (default 10m); STORE_SCHEME, the scheme of the stores' public URLs (http or
-// https, default http); STORE_VALUES, a JSON object of chart values every store is installed
-// with, beneath the ones set per store; and LISTEN_ADDR for its health endpoints (default :8080).
+// /charts/hosted-mcp); GATEWAY_NAMESPACE, where the gateway runs (default mirage);
+// PROVISION_TIMEOUT, how long a store may take to become ready before it fails (default 10m);
+// STORE_SCHEME, the scheme of the stores' public URLs (http or https, default http);
+// STORE_VALUES, a JSON object of chart values every store is installed with, beneath the ones
+// set per store; TENANT_ROLE, SERVICE_ACCOUNT, and POD_NAMESPACE, the ClusterRole it binds to
+// its own service account in each namespace it creates; and LISTEN_ADDR for its health
+// endpoints (default :8080).
 package main
 
 import (
@@ -60,7 +62,8 @@ func run() error {
 			return fmt.Errorf("STORE_VALUES must be a JSON object: %w", err)
 		}
 	}
-	cluster, err := provisioner.NewKube(cmp.Or(os.Getenv("STORE_CHART"), "/charts/store"), cmp.Or(os.Getenv("HOSTED_CHART"), "/charts/hosted-mcp"))
+	cluster, err := provisioner.NewKube(cmp.Or(os.Getenv("STORE_CHART"), "/charts/store"), cmp.Or(os.Getenv("HOSTED_CHART"), "/charts/hosted-mcp"),
+		provisioner.Tenant{Role: os.Getenv("TENANT_ROLE"), ServiceAccount: os.Getenv("SERVICE_ACCOUNT"), Namespace: os.Getenv("POD_NAMESPACE")})
 	if err != nil {
 		return err
 	}
